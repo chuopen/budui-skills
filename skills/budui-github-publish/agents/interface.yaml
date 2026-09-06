@@ -1,0 +1,11 @@
+interface:
+  display_name: "Budui GitHub Publish"
+  short_description: "Safely inspect, create, or update a GitHub repository from a local project"
+  default_prompt: "Use $budui-github-publish to inspect this local project and publish it to GitHub safely. Identify my authenticated account and existing repository relationship first. Ask me to choose public or private if it is not explicit, show an exact publish preview, and only write to GitHub after I explicitly confirm."
+  examples: ["上传到 GitHub", "先检查这个项目有没有上传过 GitHub，不要推送", "帮我创建私有 GitHub 仓库并上传当前项目"]
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets: ["openai", "claude", "generic", "agent-skills-compatible"]
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"

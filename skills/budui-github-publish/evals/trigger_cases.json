@@ -1,0 +1,28 @@
+{
+  "recommended_threshold": 0.34,
+  "description_required_concepts": ["github", "publish", "project"],
+  "positive_concepts": {
+    "github": ["github", "GitHub"],
+    "publish": ["上传", "推送", "发布", "publish", "push", "创建仓库", "更新"],
+    "project": ["项目", "project", "仓库", "repository", "代码"]
+  },
+  "negative_patterns": ["不要上传", "只解释", "PyPI", "GitHub Release", "只看一下", "打开 GitHub"],
+  "should_trigger": [
+    {"text":"上传到 GitHub", "family":"minimal-cn"},
+    {"text":"帮我上传到 GitHub，先看看这个项目是不是之前已经传过", "family":"existing-project"},
+    {"text":"把当前项目推送到 GitHub，创建私有仓库", "family":"new-private"},
+    {"text":"检查这个项目有没有对应的 GitHub 仓库，不要推送", "family":"inspect-only"},
+    {"text":"更新 GitHub 上这个项目的代码", "family":"update"}
+  ],
+  "should_not_trigger": [
+    {"text":"解释一下 Git 和 GitHub 的区别", "family":"explain"},
+    {"text":"把这个 Python 包发布到 PyPI", "family":"pypi"},
+    {"text":"创建一个 GitHub Release", "family":"release-only"},
+    {"text":"不要上传到 GitHub，只看一下 git status", "family":"explicit-no-upload"}
+  ],
+  "near_neighbor": [
+    {"text":"把代码提交到本地 Git", "family":"local-git"},
+    {"text":"帮我打开 GitHub 上的这个仓库", "family":"open-repo"},
+    {"text":"部署这个网站到 Vercel", "family":"deploy"}
+  ]
+}
