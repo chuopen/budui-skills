@@ -4,14 +4,16 @@
 
 | Skill | 用途 |
 |---|---|
-| [budui-meta-skill](skills/budui-meta-skill/SKILL.md) | 先确认需求，再创建个人技能；小工具采用轻量流程 |
-| [budui-github-publish](skills/budui-github-publish/SKILL.md) | 识别已有仓库、检查敏感信息、创建或更新 GitHub 项目 |
+| [budui-meta-skill](skills/budui-meta-skill/SKILL.md) | 将重复工作整理为可验证、可发布的个人 Skill |
+| [budui-github-publish](skills/budui-github-publish/SKILL.md) | 审核并安全创建或更新 GitHub 项目，含连通性恢复与远端回读 |
+| [budui-oss-deploy](skills/budui-oss-deploy/SKILL.md) | 部署静态站到 OSS，管理独立 Bucket、自定义域名与部署状态 |
 
 ## 安装
 
 ```bash
 npx skills add chuopen/budui-skills --skill budui-meta-skill
 npx skills add chuopen/budui-skills --skill budui-github-publish
+npx skills add chuopen/budui-skills --skill budui-oss-deploy
 ```
 
 ## 使用
@@ -20,7 +22,9 @@ npx skills add chuopen/budui-skills --skill budui-github-publish
 
 “帮我上传到 GitHub，公开即可。”
 
-GitHub 发布需要 Git、已登录的 gh 和 gitleaks。扫描目录及历史，不上传 API Key、Token、密码、私钥或用户私密资料。扫描通过不等于绝对无泄漏，发布前仍须审核文件范围。Skill 使用运行时登录态，不包含凭据。
+“把这个静态站部署到 OSS，绑定 `me.budui.fun`。”
+
+GitHub 发布需要 Git、GitHub CLI (`gh`) 和 gitleaks。Skill 先验证 CLI 身份，并在 Windows 证书链受限时尝试进程级恢复；不保存 Token。扫描目录及历史，不上传 API Key、Token、密码、私钥或用户私密资料。扫描通过不等于绝对无泄漏，发布前仍须审核文件范围。
 
 ## 来源与许可
 
