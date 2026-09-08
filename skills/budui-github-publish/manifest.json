@@ -1,8 +1,8 @@
 {
   "name": "budui-github-publish",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "owner": "不兑 (budui)",
-  "updated_at": "2026-09-06",
+  "updated_at": "2026-09-08",
   "status": "active",
   "maturity_tier": "governed",
   "lifecycle_stage": "library",
@@ -17,6 +17,7 @@
   ],
   "release_gates": [
     "preflight",
+    "transport-recovery",
     "explicit-visibility",
     "explicit-write-confirmation",
     "secret-scan",
