@@ -3,7 +3,7 @@ name: budui-github-publish
 description: |
   Safely publish or update the user's local project on GitHub. Use when the user says “上传到 GitHub”, “帮我上传到 GitHub”, “推送到 GitHub”, “发布到 GitHub”, “创建 GitHub 仓库”, or asks whether a local project was already uploaded. Detect the authenticated GitHub identity and existing project/repository relationship, determine whether this is an update or a new repository, inspect publish readiness, require an explicit public/private choice when unknown, preview the exact remote change, then create or update the repository and independently verify it. Do not use for generic Git explanations, a one-off git command, GitHub Releases only, or requests that explicitly say not to upload.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   author: 不兑 (budui)
 ---
 
@@ -21,9 +21,16 @@ metadata:
 - 不使用 `git add -A` 向混合目录盲目暂存；仅暂存已审核的项目文件。保留用户无关的脏改动。
 - 成功命令不是完成证明。每次创建或推送后都用 GitHub API/CLI 回读仓库、默认分支和提交 SHA。
 
+## GitHub 连通性恢复
+
+- 网页已登录不等于 `gh` 已授权；先用 `gh api user --jq .login` 验证 CLI 身份，不要仅凭 `gh auth status` 失败就把排障交给用户。
+- 若 Windows 上出现证书链、吊销检查或连接重置，预检会自动以 `GODEBUG=x509usefallbackroots=1` 对当前 `gh` 子进程重试。成功后将该变量保留在本次发布命令的进程环境中，不写入用户环境变量、仓库或配置文件。
+- 若 Git HTTPS 仍报 `CRYPT_E_REVOCATION_OFFLINE`，只对失败的 `clone`、`fetch` 或 `push` 命令追加 `-c http.schannelCheckRevoke=false` 后重试一次；不得写入 `--global` 配置。该绕过降低证书吊销检查，必须在发布报告中说明。
+- 只有常规连接和上述两种进程级恢复均失败时，才报告网络阻断；保留本地变更与预检结果，并说明已尝试的恢复路径。不得要求用户粘贴 Token。
+
 ## 工作流
 
-1. 在目标项目根目录运行 `scripts/preflight.py .`，读取身份、仓库线索、Git 状态与发布风险；先报告，不写入。
+1. 在目标项目根目录运行 `scripts/preflight.py .`，读取身份、仓库线索、Git 状态与发布风险；预检会尝试进程级 GitHub 连通性恢复。先报告，不写入。
 2. 判断项目身份，优先级如下：现有 `origin` → `.git` 历史与 GitHub 远端 → 用户明确的 `OWNER/REPO` → 同名仓库搜索结果。多个候选或名称碰撞时，展示候选并让用户选择。
 3. 明确交付动作：更新已有仓库，或创建新仓库。新建时确认仓库名、owner、可见性；更新时确认远端与分支。公开/私有未知时只问这一项，不做远程写入。
 4. 审核发布范围：展示将提交的文件、忽略项、秘密扫描结果、README/许可证状态和可执行的验证结果。阻断项必须先修复；非阻断项明确列入报告。
