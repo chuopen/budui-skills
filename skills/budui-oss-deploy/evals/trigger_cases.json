@@ -1,0 +1,24 @@
+{
+  "recommended_threshold": 0.34,
+  "description_required_concepts": ["oss", "static", "deploy"],
+  "positive_concepts": {
+    "oss": ["OSS", "阿里云 OSS", "对象存储"],
+    "static": ["静态站", "静态网站", "前端产物", "HTML", "static site"],
+    "deploy": ["部署", "发布", "上传", "绑定域名", "upload"]
+  },
+  "negative_patterns": ["迁移整个 bucket", "部署后端服务", "CDN 加速", "先不要发布", "历史文件"],
+  "should_trigger": [
+    {"text": "把这个静态网页部署到阿里云 OSS", "family": "cn_static_deploy"},
+    {"text": "把 dist 发布到 OSS 并绑定 ticket.example.com", "family": "cn_domain_deploy"},
+    {"text": "Upload this static site to Alibaba Cloud OSS", "family": "en_static_deploy"}
+  ],
+  "should_not_trigger": [
+    {"text": "把整个 OSS bucket 迁移到另一个账号", "family": "oss_migration"},
+    {"text": "部署我的 Node 后端服务", "family": "backend_deploy"},
+    {"text": "给网站配置 CDN 加速", "family": "cdn_configuration"}
+  ],
+  "near_neighbor": [
+    {"text": "查一下 OSS 里有哪些历史文件，先不要发布", "family": "oss_management"},
+    {"text": "帮我解释 CNAME 和 TXT 的区别", "family": "dns_explanation"}
+  ]
+}

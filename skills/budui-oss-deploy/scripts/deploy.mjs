@@ -52,14 +52,46 @@ const MIME = {
   ".xml": "application/xml", ".pdf": "application/pdf", ".mp4": "video/mp4", ".webm": "video/webm",
 };
 
+const DEVELOPMENT_DIRS = new Set([".git", ".vercel", "node_modules", "docs", "test", "tests", "tasks"]);
+const DEVELOPMENT_FILES = new Set(["agents.md", "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"]);
+
 async function walk(dir, base) {
   const out = [];
   for (const name of await readdir(dir)) {
     const full = join(dir, name);
     if ((await stat(full)).isDirectory()) out.push(...await walk(full, base));
-    else out.push({ local: full, key: relative(base, full).split(/[\\/]/).join("/") }); // key 只用相对路径
+    else {
+      const fileStat = await stat(full);
+      out.push({ local: full, key: relative(base, full).split(/[\\/]/).join("/"), size: fileStat.size }); // key 只用相对路径
+    }
   }
   return out;
+}
+
+function findReleaseHazards(files, maxFileSizeBytes) {
+  const development = [];
+  const large = [];
+  for (const file of files) {
+    const parts = file.key.toLowerCase().split("/");
+    if (parts.some((part) => DEVELOPMENT_DIRS.has(part)) || DEVELOPMENT_FILES.has(parts.at(-1))) {
+      development.push(`${file.key}（开发/管理文件）`);
+    }
+    if (file.size > maxFileSizeBytes) {
+      large.push(`${file.key}（${Math.ceil(file.size / 1024 / 1024)} MB，超过单文件限制）`);
+    }
+  }
+  return { development, large };
+}
+
+async function listObjectNames(client, prefix) {
+  let marker;
+  const remote = [];
+  do {
+    const list = await client.list({ prefix, "max-keys": 1000, marker }, true);
+    remote.push(...(list.objects || []).map((o) => o.name));
+    marker = list.nextMarker;
+  } while (marker);
+  return remote;
 }
 
 /** OSS raw HTTP + V1 签名（ali-oss SDK 未覆盖的管控 API；bucket 为空表示账号级） */
@@ -100,7 +132,7 @@ async function createCnameToken(env, domain) {
 }
 
 /** 在阿里云 DNS 添加/更新记录（type: CNAME/TXT），返回是否新添加 */
-async function ensureDnsRecord({ accessKeyId, accessKeySecret }, domain, type, value) {
+async function ensureDnsRecord({ accessKeyId, accessKeySecret }, domain, type, value, allowReplace = false) {
   const D = require("@alicloud/alidns20150109");
   const { Config } = require("@alicloud/openapi-client");
   const client = new D.default(new Config({ accessKeyId, accessKeySecret, endpoint: "alidns.aliyuncs.com" }));
@@ -114,6 +146,9 @@ async function ensureDnsRecord({ accessKeyId, accessKeySecret }, domain, type, v
   const records = existing.body?.domainRecords?.record || [];
   if (records.some((r) => r.value === value)) return false;
   if (records.length) {
+    if (!allowReplace) {
+      throw new Error(`${domain} 已有 ${type} 记录指向 ${records[0].value}；拒绝自动改写。确认切换后加 --replace-domain-dns。`);
+    }
     await client.updateDomainRecord(
       new D.UpdateDomainRecordRequest({ recordId: records[0].recordId, RR: rr, type, value })
     );
@@ -137,6 +172,11 @@ async function main() {
       "cert-dir": { type: "string" },
       "no-spa": { type: "boolean", default: false },
       "no-clean": { type: "boolean", default: false },
+      "allow-existing-root": { type: "boolean", default: false },
+      "allow-project-source": { type: "boolean", default: false },
+      "allow-large-files": { type: "boolean", default: false },
+      "max-file-size-mb": { type: "string", default: "50" },
+      "replace-domain-dns": { type: "boolean", default: false },
     },
   });
   const env = {
@@ -151,8 +191,27 @@ async function main() {
     process.exit(1);
   }
   if (!values.source) {
-    console.error("用法: deploy.mjs --source <产物目录> [--prefix <子目录>] [--domain <xxx.budui.fun>] [--cert-dir <证书目录>] [--no-spa] [--no-clean]");
+    console.error("用法: deploy.mjs --source <发布目录> [--prefix <子目录>] [--domain <xxx.budui.fun>] [--cert-dir <证书目录>] [--allow-existing-root] [--allow-project-source] [--allow-large-files] [--replace-domain-dns] [--no-spa] [--no-clean]");
     process.exit(1);
+  }
+
+  const prefix = values.prefix ? values.prefix.replace(/\/+$/, "") + "/" : "";
+  if (values.domain && prefix) {
+    throw new Error("自定义域名不能与 --prefix 混用：OSS 域名绑定始终指向 bucket 根路径。请为独立站点创建独立 bucket。");
+  }
+  const maxFileSizeMb = Number(values["max-file-size-mb"]);
+  if (!Number.isFinite(maxFileSizeMb) || maxFileSizeMb <= 0) throw new Error("--max-file-size-mb 必须是正数。");
+  // realpath 统一 8.3 短路径/符号链接，避免 relative() 算出绝对路径当 key
+  const source = await realpath(values.source);
+  const files = await walk(source, source);
+  if (!files.some((file) => file.key === "index.html")) throw new Error("发布目录缺少 index.html。");
+  const hazards = findReleaseHazards(files, maxFileSizeMb * 1024 * 1024);
+  const blocked = [
+    ...(values["allow-project-source"] ? [] : hazards.development),
+    ...(values["allow-large-files"] ? [] : hazards.large),
+  ];
+  if (blocked.length) {
+    throw new Error(`发布目录不是干净产物，拒绝上传：${blocked.slice(0, 8).join("；")}${blocked.length > 8 ? "；…" : ""}\n请创建只含运行资源的发布目录（如 dist/）。开发文件需 --allow-project-source；大文件需 --allow-large-files，并先确认它确实是站点资源。`);
   }
 
   const OSS = await loadOss();
@@ -171,6 +230,10 @@ async function main() {
     console.log(`bucket ${env.bucket} 不存在，自动创建…`);
     await client.putBucket(env.bucket);
     fresh = true;
+  }
+  const existingObjects = fresh ? [] : await listObjectNames(client, prefix);
+  if (!fresh && !prefix && existingObjects.length && !values["allow-existing-root"]) {
+    throw new Error(`bucket ${env.bucket} 根路径已有 ${existingObjects.length} 个对象。为避免覆盖同 bucket 的其他站点，拒绝部署。请改用独立 bucket；仅在已确认该根路径完全属于当前站点时才加 --allow-existing-root。`);
   }
   {
     const acl = (await client.getBucketACL(env.bucket)).acl || "private";
@@ -201,10 +264,6 @@ async function main() {
     }
   }
 
-  const prefix = values.prefix ? values.prefix.replace(/\/+$/, "") + "/" : "";
-  // realpath 统一 8.3 短路径/符号链接，避免 relative() 算出绝对路径当 key
-  const source = await realpath(values.source);
-  const files = await walk(source, source);
   console.log(`待上传 ${files.length} 个文件 → oss://${env.bucket}/${prefix}`);
 
   for (const f of files) {
@@ -212,20 +271,15 @@ async function main() {
     const mime = MIME[extname(f.local).toLowerCase()] || "application/octet-stream";
     // html/js/css 不缓存，其余缓存 1 天，避免发版后浏览器用旧资源
     const cache = /\.(html|js|css)$/.test(f.key) ? "no-cache" : "max-age=86400";
-    await client.put(f.key, body, { headers: { "Content-Type": mime, "Cache-Control": cache } });
-    console.log(`  ✓ ${f.key}`);
+    const key = `${prefix}${f.key}`;
+    await client.put(key, body, { headers: { "Content-Type": mime, "Cache-Control": cache } });
+    console.log(`  ✓ ${key}`);
   }
 
   if (!values["no-clean"]) {
     // 仅清理目标前缀内的云端多余旧文件
-    let marker;
-    const remote = [];
-    do {
-      const list = await client.list({ prefix, "max-keys": 1000, marker }, true);
-      remote.push(...(list.objects || []).map((o) => o.name));
-      marker = list.nextMarker;
-    } while (marker);
-    const localKeys = new Set(files.map((f) => f.key));
+    const remote = await listObjectNames(client, prefix);
+    const localKeys = new Set(files.map((f) => `${prefix}${f.key}`));
     const stale = remote.filter((k) => !localKeys.has(k));
     if (stale.length) {
       console.log(`清理 ${stale.length} 个云端多余旧文件…`);
@@ -244,7 +298,7 @@ async function main() {
   });
 
   const host = values.domain || `${env.bucket}.${env.region}.aliyuncs.com`;
-  const scheme = values.domain ? "https" : "http";
+  const scheme = values.domain && values["cert-dir"] ? "https" : "http";
   console.log(`\n部署完成 ✔`);
 
   // 自定义域名：CNAME + PutCname（可带证书）；必要时走归属验证（CnameToken + TXT）
@@ -252,9 +306,9 @@ async function main() {
     const target = `${env.bucket}.${env.region}.aliyuncs.com`;
     console.log(`配置自定义域名 ${values.domain}…`);
     try {
-      await ensureDnsRecord(env, values.domain, "CNAME", target);
+      await ensureDnsRecord(env, values.domain, "CNAME", target, values["replace-domain-dns"]);
     } catch (e) {
-      console.warn(`  ⚠ DNS 记录操作失败（可手动添加 CNAME ${values.domain} → ${target}）: ${e.message}`);
+      throw new Error(`自定义域名 DNS 未就绪：${e.message}\n请手动添加 CNAME ${values.domain} → ${target} 后重试；若要改写已有记录，显式传 --replace-domain-dns。`);
     }
     let cert, key;
     if (values["cert-dir"]) {
@@ -274,7 +328,7 @@ async function main() {
         const { token } = await createCnameToken(env, values.domain);
         let txtOk = true;
         try {
-          await ensureDnsRecord(env, `_dnsauth.${values.domain}`, "TXT", token);
+          await ensureDnsRecord(env, `_dnsauth.${values.domain}`, "TXT", token, true);
         } catch (e2) {
           txtOk = false;
           console.warn(`  ⚠ TXT 记录添加失败，请手动添加：主机记录 _dnsauth、类型 TXT、记录值 ${token}`);

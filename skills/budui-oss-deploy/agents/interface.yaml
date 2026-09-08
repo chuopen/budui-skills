@@ -1,0 +1,37 @@
+interface:
+  display_name: "Budui OSS 安全部署"
+  short_description: "将静态发布产物隔离部署到阿里云 OSS"
+  default_prompt: "使用 budui-oss-deploy 将这个静态站点部署到 OSS。先建立只含运行资源的发布目录，确认目标 bucket 与域名没有共享站点；非空根路径、已有 CNAME 或大文件必须先说明影响并等待显式放行。完成后用实际 HTTP 地址验证 200。"
+  examples:
+    - "把这个静态站部署到 OSS，并绑定 ticket.example.com"
+    - "把 dist 发布到新的 OSS bucket，不要影响已有网站"
+    - "更新当前站点，但先检查 bucket 根路径是否有其他项目"
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets: ["openai", "claude", "generic", "agent-skills-compatible"]
+  activation:
+    mode: "manual"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "bash"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    generated_public_claims: "evidence-bound"
+  permissions:
+    network: "阿里云 OSS、阿里云 DNS 与发布后的 HTTP 验证；仅在用户要求部署或绑定域名时使用"
+    file_write: "发布目录与本地凭证文件以外不写入；不把密钥写入仓库"
+    subprocess: "Node 部署脚本、HTTP/DNS 只读验证"
+    interactive: "仅在需要确认共享 bucket 覆盖、DNS 改写或认证时要求用户介入"
+  degradation:
+    openai: "metadata-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"
+    agent-skills-compatible: "canonical-source"
+gates:
+  governed:
+    - "非空 bucket 根路径默认拒绝"
+    - "已有 CNAME 默认拒绝改写"
+    - "发布包卫生与大文件检查"
+    - "HTTP 200 验证"

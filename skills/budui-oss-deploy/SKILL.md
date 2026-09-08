@@ -4,7 +4,7 @@ description: |
   将本地项目部署到阿里云 OSS 静态网站托管。支持两种访问方式：OSS 默认域名（<bucket>.<region>.aliyuncs.com，HTTP，无需备案）和自定义域名（如 xxx.budui.fun，自动 CNAME + 归属验证 + 域名绑定，可加 SSL 证书开 HTTPS；大陆区域要求域名已 ICP 备案）。适用于：前端项目"构建+上传 dist/"、任意静态目录直传、SPA 404 回退。当用户说"部署到 OSS"、"上传到阿里云 OSS"、"发布静态网站"时使用。不适用于：CDN 加速、后端服务部署、OSS 数据迁移或管理类操作。
 metadata:
   author: 不兑 (budui)
-  version: "0.4.0"
+  version: "0.5.0"
   copyright: "Copyright (c) 不兑"
   homepage: https://github.com/chuopen/
 ---
@@ -42,14 +42,14 @@ OSS_REGION=oss-cn-hangzhou
 ## 工作流
 
 1. 读 `~/.oss-deploy.env` 或环境变量，缺哪个列哪个并指引用户补。
-2. 判断部署模式：有 `package.json` + `build` 脚本 → 先构建（产物目录看 vite/next 配置确认，别猜）；纯静态/用户指定目录 → 直传。
+2. 判断部署模式：有 `package.json` + `build` 脚本 → 先构建（产物目录看 vite/next 配置确认，别猜）；纯静态项目也必须建立只包含 `index.html` 与实际资源的发布目录。禁止把项目根目录直接当发布目录。
 3. 运行：
 
 ```bash
-node "<本skill目录>/scripts/deploy.mjs" --source <产物目录> [--domain <子域名>] [--cert-dir <证书目录>] [--prefix <云端子目录>] [--no-spa]
+node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> [--domain <子域名>] [--cert-dir <证书目录>] [--prefix <云端子目录>] [--no-spa]
 ```
 
-脚本自动完成：创建 bucket（公共读，自动关闭账号级和 bucket 级"阻止公共访问"）→ 上传（正确 Content-Type + 缓存策略）→ 清理前缀内旧文件 → 静态网站托管（index + SPA 404 回退）→ 自定义域名（CNAME → TXT 归属验证（自动等待 90 秒）→ PutCname 绑定）。
+脚本自动完成：发布目录卫生检查 → 创建 bucket（公共读，自动关闭账号级和 bucket 级"阻止公共访问"）→ 上传（正确 Content-Type + 缓存策略）→ 清理前缀内旧文件 → 静态网站托管（index + SPA 404 回退）→ 自定义域名（CNAME → TXT 归属验证（自动等待 90 秒）→ PutCname 绑定）。
 
 4. 部署后验证：curl 首页返回 200 才算成功；自定义域名 DNS 生效需几分钟。
 5. 向用户报告访问地址。用了自定义域名提醒：HTTPS 需要证书（见下）。
@@ -83,8 +83,11 @@ node "<本skill目录>/scripts/deploy.mjs" --source <产物目录> [--domain <�
 
 - 密钥只从环境变量或 `~/.oss-deploy.env` 读取；不进代码、仓库、对话。
 - 证书私钥只放用户本地目录。
-- 只操作 `OSS_BUCKET` 指定的单个 bucket，删除限定在目标前缀内。
-- bucket 不为空且无 `--prefix` 时，先告知会清理根路径旧文件再执行。
+- 默认拒绝向非空 bucket 根路径部署；这可能覆盖同 bucket 的其他域名。独立站点必须使用独立 bucket，只有确认根路径完全属于当前站点时才允许 `--allow-existing-root`。
+- `--prefix` 只隔离对象路径，不能隔离自定义域名；带 `--domain` 的独立站点必须用独立 bucket。
+- 发布源必须是干净产物目录；默认拒绝 `.git`、`docs`、`tests`、`tasks`、`node_modules`、锁文件及超过 50 MB 的文件。例外必须显式传 `--allow-project-source` 或 `--allow-large-files`。
+- 默认不改写已有 CNAME；确认域名切换后才传 `--replace-domain-dns`。
+- `--no-clean` 只停止删除旧文件，不能阻止同名文件被覆盖。
 
 ## 故障排查（错误码 → 用户动作）
 

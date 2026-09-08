@@ -1,15 +1,19 @@
 # budui-oss-deploy
 
-把本地项目一键部署到阿里云 OSS 静态网站托管。两种访问方式：
+把已准备好的静态发布产物安全部署到阿里云 OSS。技能默认阻止共享 bucket 根路径覆盖、无关文件上传和未确认的 DNS 改写。
+
+两种访问方式：
 
 - **默认域名**：`http://<bucket>.<region>.aliyuncs.com`（零配置，HTTP）
 - **自定义域名**：如 `https://app.budui.fun`（已备案域名，自动 CNAME + 绑定 + SSL 证书，HTTPS）
 
 ## 功能
 
-- 前端项目：自动 `npm run build` 后上传 `dist/`（构建由 AI 会话执行，脚本负责上传）
-- 任意静态目录：直传，跳过构建
+- 前端项目：构建后只上传 `dist/`（构建由 AI 会话执行，脚本负责上传）
+- 任意静态站：先生成只含运行资源的发布目录，再直传
 - 自动设置 Content-Type 与缓存策略（html/js/css 不缓存）
+- 默认拒绝向非空 bucket 根路径上传，避免覆盖同 bucket 的其他站点
+- 拒绝 `docs/`、`tests/`、`.git/`、`node_modules/`、锁文件和大文件进入发布包
 - 清理云端多余旧文件（仅限目标前缀内）
 - 配置静态网站托管：index.html 首页 + SPA 404 回退
 - 自定义域名：自动添加/更新云解析 CNAME、OSS 域名绑定（PutCname）、可选绑定 SSL 证书
@@ -30,6 +34,39 @@ OSS_REGION=oss-cn-hangzhou
 ```bash
 node scripts/deploy.mjs --source dist [--domain app.budui.fun] [--cert-dir ~/certs] [--prefix app] [--no-spa] [--no-clean]
 ```
+
+## 隔离与覆盖保护
+
+- 一个独立站点使用一个 bucket；自定义域名不能与 `--prefix` 组合，因为 OSS 域名绑定始终落到 bucket 根路径。
+- 若 bucket 根路径已有文件，脚本会停止。只有确认其完全属于本次站点时才使用 `--allow-existing-root`。
+- 若目标域名已有不同的 CNAME，脚本会停止。确认切换 DNS 后才使用 `--replace-domain-dns`。
+- 单个文件默认最大 50 MB；确实需要大媒体文件时使用 `--allow-large-files`。若发布目录仍含开发文件，可显式使用 `--allow-project-source`，但它不应成为常规路径。
+- `--no-clean` 只能阻止删除旧文件，不能阻止同名文件被覆盖。
+
+## 验证
+
+```bash
+node --check scripts/deploy.mjs
+```
+
+发布后必须请求实际 HTTP 地址并确认状态码为 200。无证书的自定义域名只报告 `http://` 地址；配置证书后才报告 `https://`。
+
+## 安装与使用
+
+```bash
+npx skills add chuopen/budui-skills --skill budui-oss-deploy
+```
+
+可以直接说：
+
+- “把这个静态站部署到 OSS，绑定 `ticket.example.com`，不要影响已有网站。”
+- “发布 `dist/` 到一个新的 OSS bucket，并验证 HTTP 200。”
+
+## 排错
+
+- 看到“根路径已有对象”：不要添加放行参数，优先改用新 bucket；只有确认这是同一个站点才使用 `--allow-existing-root`。
+- 看到“已有 CNAME”：先确认旧域名页面不再需要，再使用 `--replace-domain-dns`。
+- 看到“发布目录不是干净产物”：先建立发布目录，只复制实际运行的 HTML、CSS、JS 和资源文件。
 
 ## HTTPS 证书（自定义域名）
 
