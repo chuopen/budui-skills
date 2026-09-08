@@ -1,0 +1,10 @@
+{
+  "name": "budui-oss-deploy-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ali-oss": "^6.23.0",
+    "@alicloud/alidns20150109": "^3.0.0",
+    "@alicloud/openapi-client": "^0.4.0"
+  }
+}
