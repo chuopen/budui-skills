@@ -2,6 +2,9 @@
   "name": "budui-oss-deploy-scripts",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
   "dependencies": {
     "ali-oss": "^6.23.0",
     "@alicloud/alidns20150109": "^3.0.0",

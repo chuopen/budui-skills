@@ -1,0 +1,123 @@
+{
+  "ok": true,
+  "threshold": 0.34,
+  "description_concepts": [
+    "deploy",
+    "oss",
+    "static"
+  ],
+  "missing_description_concepts": [],
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "false_positive": 0,
+    "false_negative": 0,
+    "pass_rate": 1.0
+  },
+  "failures": [],
+  "results": {
+    "should_trigger": [
+      {
+        "prompt": "把这个静态网页部署到阿里云 OSS",
+        "family": "cn_static_deploy",
+        "expected_trigger": true,
+        "predicted_trigger": true,
+        "passed": true,
+        "score": 0.667,
+        "matched_concepts": [
+          "deploy",
+          "oss"
+        ],
+        "negative_pattern": null
+      },
+      {
+        "prompt": "把 dist 发布到 OSS 并绑定 ticket.example.com",
+        "family": "cn_domain_deploy",
+        "expected_trigger": true,
+        "predicted_trigger": true,
+        "passed": true,
+        "score": 0.667,
+        "matched_concepts": [
+          "deploy",
+          "oss"
+        ],
+        "negative_pattern": null
+      },
+      {
+        "prompt": "Upload this static site to Alibaba Cloud OSS",
+        "family": "en_static_deploy",
+        "expected_trigger": true,
+        "predicted_trigger": true,
+        "passed": true,
+        "score": 1.0,
+        "matched_concepts": [
+          "deploy",
+          "oss",
+          "static"
+        ],
+        "negative_pattern": null
+      }
+    ],
+    "should_not_trigger": [
+      {
+        "prompt": "把整个 OSS bucket 迁移到另一个账号",
+        "family": "oss_migration",
+        "expected_trigger": false,
+        "predicted_trigger": false,
+        "passed": true,
+        "score": 0.333,
+        "matched_concepts": [
+          "oss"
+        ],
+        "negative_pattern": null
+      },
+      {
+        "prompt": "部署我的 Node 后端服务",
+        "family": "backend_deploy",
+        "expected_trigger": false,
+        "predicted_trigger": false,
+        "passed": true,
+        "score": 0.333,
+        "matched_concepts": [
+          "deploy"
+        ],
+        "negative_pattern": null
+      },
+      {
+        "prompt": "给网站配置 CDN 加速",
+        "family": "cdn_configuration",
+        "expected_trigger": false,
+        "predicted_trigger": false,
+        "passed": true,
+        "score": 0.0,
+        "matched_concepts": [],
+        "negative_pattern": "CDN 加速"
+      }
+    ],
+    "near_neighbor": [
+      {
+        "prompt": "查一下 OSS 里有哪些历史文件，先不要发布",
+        "family": "oss_management",
+        "expected_trigger": false,
+        "predicted_trigger": false,
+        "passed": true,
+        "score": 0.667,
+        "matched_concepts": [
+          "deploy",
+          "oss"
+        ],
+        "negative_pattern": "先不要发布"
+      },
+      {
+        "prompt": "帮我解释 CNAME 和 TXT 的区别",
+        "family": "dns_explanation",
+        "expected_trigger": false,
+        "predicted_trigger": false,
+        "passed": true,
+        "score": 0.0,
+        "matched_concepts": [],
+        "negative_pattern": null
+      }
+    ]
+  }
+}

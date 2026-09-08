@@ -1,0 +1,14 @@
+{
+  "name": "budui-oss-deploy",
+  "version": "0.5.0",
+  "owner": "不兑 (budui)",
+  "updated_at": "2026-09-08",
+  "status": "active",
+  "maturity_tier": "governed",
+  "lifecycle_stage": "production",
+  "context_budget_tier": "production",
+  "review_cadence": "每次发生误覆盖、误上传或域名误指向后复审",
+  "qiaomu_defaults": {"skill_name_prefix": "budui-", "copyright": "Copyright (c) 不兑", "github": "https://github.com/chuopen/"},
+  "target_platforms": ["openai", "claude", "generic", "agent-skills-compatible"],
+  "release_gates": ["source-hygiene", "shared-root-protection", "dns-repoint-confirmation", "secret-scan", "http-verification"]
+}
