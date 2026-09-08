@@ -1,17 +1,25 @@
 ---
 name: budui-oss-deploy
 description: |
-  将本地项目部署到阿里云 OSS 静态网站托管。支持两种访问方式：OSS 默认域名（<bucket>.<region>.aliyuncs.com，HTTP，无需备案）和自定义域名（如 xxx.budui.fun，自动 CNAME + 归属验证 + 域名绑定，可加 SSL 证书开 HTTPS；大陆区域要求域名已 ICP 备案）。适用于：前端项目"构建+上传 dist/"、任意静态目录直传、SPA 404 回退。当用户说"部署到 OSS"、"上传到阿里云 OSS"、"发布静态网站"时使用。不适用于：CDN 加速、后端服务部署、OSS 数据迁移或管理类操作。
+  将本地项目部署到阿里云 OSS 静态网站托管，自动处理独立 Bucket、budui.fun 自定义子域名、DNS 归属验证、部署状态记录与 HTTP/HTTPS 验收。适用于前端项目构建上传、静态目录直传和 SPA 404 回退；当用户说“部署到 OSS”“上传到阿里云 OSS”“发布静态网站”时使用。不适用于 CDN 加速、后端服务部署、OSS 数据迁移或管理类操作。
 metadata:
   author: 不兑 (budui)
-  version: "0.5.0"
+  version: "0.6.0"
   copyright: "Copyright (c) 不兑"
   homepage: https://github.com/chuopen/
 ---
 
 # Budui OSS Deploy
 
-把静态项目一键部署到阿里云 OSS。默认域名零门槛；自定义域名全自动（DNS + 归属验证 + 绑定 + 可选证书）。
+把静态项目发布为可维护的 OSS 站点：域名、Bucket、部署状态与验收缺一不可。
+
+## 发布目标规则
+
+1. 默认发布到独立 Bucket；已有对象的根路径一律不覆盖。为新站点生成可读、全局唯一的 Bucket 名。
+2. 默认绑定 `*.budui.fun` 自定义域名，前提是当前阿里云 DNS 账号可管理 `budui.fun`。命名按项目目的生成：个人主页用 `me.budui.fun`，产品/工具使用简短项目 slug；重名或已有不同解析时停止，不改写。
+3. 用户明确只做临时预览时，才只使用 OSS 默认域名。
+4. 不得猜测或抢占外部域名。根域名不是 `budui.fun` 时，要求用户提供完整域名。
+5. 成功后写入项目 `tasks/oss-deployment.json`（不含密钥），保存 Bucket、区域、域名、发布目录和 HTTPS 状态。下次发布先读取该文件并沿用目标。
 
 ## 首次使用引导（用户从没碰过阿里云时，按此顺序带用户做）
 
@@ -42,17 +50,19 @@ OSS_REGION=oss-cn-hangzhou
 ## 工作流
 
 1. 读 `~/.oss-deploy.env` 或环境变量，缺哪个列哪个并指引用户补。
-2. 判断部署模式：有 `package.json` + `build` 脚本 → 先构建（产物目录看 vite/next 配置确认，别猜）；纯静态项目也必须建立只包含 `index.html` 与实际资源的发布目录。禁止把项目根目录直接当发布目录。
-3. 运行：
+2. 读取项目已有 `tasks/oss-deployment.json`；若存在，优先使用其中 Bucket、Region、domain 与 source，除非用户明确迁移。
+3. 判断部署模式：有 `package.json` + `build` 脚本 → 先构建（产物目录看 vite/next 配置确认，别猜）；构建退出 0 仍必须确认发布目录存在且含 `index.html`。纯静态项目也必须建立只包含 `index.html` 与实际资源的发布目录。禁止把项目根目录直接当发布目录。
+4. 先检查 Node 与构建器兼容性。发现本机有满足项目要求的运行时，优先使用它；构建器异常退出或没有发布目录时停止上传，报告可执行修复。
+5. 运行：
 
 ```bash
-node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> [--domain <子域名>] [--cert-dir <证书目录>] [--prefix <云端子目录>] [--no-spa]
+node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> --state-file tasks/oss-deployment.json [--domain <子域名>] [--cert-dir <证书目录>] [--prefix <云端子目录>] [--no-spa]
 ```
 
 脚本自动完成：发布目录卫生检查 → 创建 bucket（公共读，自动关闭账号级和 bucket 级"阻止公共访问"）→ 上传（正确 Content-Type + 缓存策略）→ 清理前缀内旧文件 → 静态网站托管（index + SPA 404 回退）→ 自定义域名（CNAME → TXT 归属验证（自动等待 90 秒）→ PutCname 绑定）。
 
-4. 部署后验证：curl 首页返回 200 才算成功；自定义域名 DNS 生效需几分钟。
-5. 向用户报告访问地址。用了自定义域名提醒：HTTPS 需要证书（见下）。
+5. 部署后验证自定义域名的 DNS CNAME、首页正文、关键 CSS 与至少一张站内图片均返回 200，并检查 Content-Type；SPA 再验证深层路径刷新。
+6. 向用户报告自定义域名而非 Bucket 地址。HTTPS 只有证书生效并返回 200 时才能标记“正式上线”；否则明确标记“HTTP 已上线，HTTPS 待完成”。
 
 ## 已知坑（实战踩过，脚本已内置对策）
 
@@ -83,7 +93,7 @@ node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> [--domain <�
 
 - 密钥只从环境变量或 `~/.oss-deploy.env` 读取；不进代码、仓库、对话。
 - 证书私钥只放用户本地目录。
-- 默认拒绝向非空 bucket 根路径部署；这可能覆盖同 bucket 的其他域名。独立站点必须使用独立 bucket，只有确认根路径完全属于当前站点时才允许 `--allow-existing-root`。
+- 默认拒绝向非空 bucket 根路径部署；这可能覆盖同 bucket 的其他域名。独立站点必须使用独立 bucket，只有读取到同项目的 `tasks/oss-deployment.json` 且确认 Bucket 一致时才允许 `--allow-existing-root`。
 - `--prefix` 只隔离对象路径，不能隔离自定义域名；带 `--domain` 的独立站点必须用独立 bucket。
 - 发布源必须是干净产物目录；默认拒绝 `.git`、`docs`、`tests`、`tasks`、`node_modules`、锁文件及超过 50 MB 的文件。例外必须显式传 `--allow-project-source` 或 `--allow-large-files`。
 - 默认不改写已有 CNAME；确认域名切换后才传 `--replace-domain-dns`。

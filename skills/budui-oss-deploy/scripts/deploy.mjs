@@ -5,8 +5,8 @@
  * 密钥只从环境变量读取：OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET / OSS_BUCKET / OSS_REGION
  */
 import { parseArgs } from "node:util";
-import { readdir, stat, readFile, realpath } from "node:fs/promises";
-import { join, relative, extname, posix } from "node:path";
+import { readdir, stat, readFile, realpath, mkdir, writeFile } from "node:fs/promises";
+import { join, relative, extname, dirname } from "node:path";
 import { createHmac } from "node:crypto";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
@@ -177,6 +177,7 @@ async function main() {
       "allow-large-files": { type: "boolean", default: false },
       "max-file-size-mb": { type: "string", default: "50" },
       "replace-domain-dns": { type: "boolean", default: false },
+      "state-file": { type: "string" },
     },
   });
   const env = {
@@ -191,7 +192,7 @@ async function main() {
     process.exit(1);
   }
   if (!values.source) {
-    console.error("用法: deploy.mjs --source <发布目录> [--prefix <子目录>] [--domain <xxx.budui.fun>] [--cert-dir <证书目录>] [--allow-existing-root] [--allow-project-source] [--allow-large-files] [--replace-domain-dns] [--no-spa] [--no-clean]");
+    console.error("用法: deploy.mjs --source <发布目录> [--prefix <子目录>] [--domain <xxx.budui.fun>] [--cert-dir <证书目录>] [--state-file <项目部署状态 JSON>] [--allow-existing-root] [--allow-project-source] [--allow-large-files] [--replace-domain-dns] [--no-spa] [--no-clean]");
     process.exit(1);
   }
 
@@ -298,7 +299,8 @@ async function main() {
   });
 
   const host = values.domain || `${env.bucket}.${env.region}.aliyuncs.com`;
-  const scheme = values.domain && values["cert-dir"] ? "https" : "http";
+  let scheme = "http";
+  let domainBound = false;
   console.log(`\n部署完成 ✔`);
 
   // 自定义域名：CNAME + PutCname（可带证书）；必要时走归属验证（CnameToken + TXT）
@@ -321,6 +323,8 @@ async function main() {
     }
     try {
       await putCname(env, values.domain, cert, key);
+      domainBound = true;
+      if (cert) scheme = "https";
       console.log(cert ? `  ✓ 域名已绑定并开启 HTTPS（证书需覆盖 ${values.domain}）` : `  ✓ 域名已绑定（HTTP）`);
     } catch (e) {
       if (String(e.message).includes("NeedVerifyDomainOwnership")) {
@@ -338,12 +342,30 @@ async function main() {
           await new Promise((r) => setTimeout(r, 90_000));
         }
         await putCname(env, values.domain, cert, key);
+        domainBound = true;
+        if (cert) scheme = "https";
         console.log(cert ? `  ✓ 域名已绑定并开启 HTTPS（证书需覆盖 ${values.domain}）` : `  ✓ 域名已绑定（HTTP）`);
       } else {
         console.warn(`  ⚠ 域名绑定失败（可能已绑定过，或证书无效）: ${e.message}`);
       }
     }
     console.log(`  提示: DNS 生效一般数分钟内；证书每年需在阿里云控制台续领免费证书后更新 cert-dir 重跑。`);
+  }
+
+  if (values["state-file"]) {
+    const statePath = values["state-file"];
+    const state = {
+      bucket: env.bucket,
+      region: env.region,
+      source,
+      prefix: values.prefix || "",
+      domain: domainBound ? values.domain : null,
+      https: scheme === "https",
+      updatedAt: new Date().toISOString(),
+    };
+    await mkdir(dirname(statePath), { recursive: true });
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    console.log(`部署状态已写入: ${statePath}`);
   }
 
   console.log(`访问地址: ${scheme}://${host}/${values.prefix || ""}`);
