@@ -1,15 +1,15 @@
 # budui-oss-deploy
 
-把已准备好的静态发布产物安全部署到阿里云 OSS。技能默认阻止共享 bucket 根路径覆盖、无关文件上传和未确认的 DNS 改写。
+把已准备好的静态发布产物安全部署到阿里云 OSS。技能默认使用独立 Bucket、项目语义化的 `budui.fun` 子域名，并记录部署身份，阻止共享 Bucket 覆盖、无关文件上传和未确认的 DNS 改写。
 
 两种访问方式：
 
-- **默认域名**：`http://<bucket>.<region>.aliyuncs.com`（零配置，HTTP）
-- **自定义域名**：如 `https://app.budui.fun`（已备案域名，自动 CNAME + 绑定 + SSL 证书，HTTPS）
+- **临时预览**：OSS 默认域名
+- **正式发布**：默认生成 `budui.fun` 子域名；个人主页用 `me.budui.fun`，产品使用项目 slug。自定义域名需证书后才启用 HTTPS。
 
 ## 功能
 
-- 前端项目：构建后只上传 `dist/`（构建由 AI 会话执行，脚本负责上传）
+- 前端项目：构建后检查实际发布目录和 `index.html`，再上传（不猜 `dist/`）
 - 任意静态站：先生成只含运行资源的发布目录，再直传
 - 自动设置 Content-Type 与缓存策略（html/js/css 不缓存）
 - 默认拒绝向非空 bucket 根路径上传，避免覆盖同 bucket 的其他站点
@@ -17,6 +17,7 @@
 - 清理云端多余旧文件（仅限目标前缀内）
 - 配置静态网站托管：index.html 首页 + SPA 404 回退
 - 自定义域名：自动添加/更新云解析 CNAME、OSS 域名绑定（PutCname）、可选绑定 SSL 证书
+- 将 Bucket、区域、域名、发布目录和 HTTPS 状态写入 `tasks/oss-deployment.json`，后续更新沿用同一目标
 
 ## 使用
 
@@ -32,7 +33,7 @@ OSS_REGION=oss-cn-hangzhou
 2. 对 AI 说"把这个项目部署到 OSS / 发布到 app.budui.fun"，或直接运行：
 
 ```bash
-node scripts/deploy.mjs --source dist [--domain app.budui.fun] [--cert-dir ~/certs] [--prefix app] [--no-spa] [--no-clean]
+node scripts/deploy.mjs --source dist --state-file tasks/oss-deployment.json [--domain app.budui.fun] [--cert-dir ~/certs] [--prefix app] [--no-spa] [--no-clean]
 ```
 
 ## 隔离与覆盖保护
@@ -49,7 +50,7 @@ node scripts/deploy.mjs --source dist [--domain app.budui.fun] [--cert-dir ~/cer
 node --check scripts/deploy.mjs
 ```
 
-发布后必须请求实际 HTTP 地址并确认状态码为 200。无证书的自定义域名只报告 `http://` 地址；配置证书后才报告 `https://`。
+发布后必须验证 CNAME、首页正文、关键 CSS 与至少一张图片均返回 200 且 Content-Type 正确。无证书的自定义域名只报告 `http://` 地址；配置证书后才报告 `https://`。
 
 ## 安装与使用
 
