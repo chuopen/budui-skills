@@ -1,0 +1,31 @@
+{
+  "recommended_threshold": 0.34,
+  "description_required_concepts": ["automotive_domain", "definition_action"],
+  "positive_concepts": {
+    "automotive_domain": ["汽车", "车辆", "销售服务", "交付服务", "售后服务", "三电", "新能源", "智能座舱", "保险金融", "充电桩"],
+    "definition_action": ["定义", "典型内容", "不包含", "排除边界", "分类边界", "补写", "重写", "统一写法"],
+    "taxonomy_level": ["二级", "三级", "四级", "分类层级", "分类节点", "VOC 分类"]
+  },
+  "negative_patterns": ["非汽车", "电商类目", "自动分类评论", "重新设计", "不要写定义", "观点归到", "一般数据字典"],
+  "should_trigger": [
+    {"text": "帮我补充汽车交付服务二级、三级、四级的定义。", "family": "delivery_definitions"},
+    {"text": "车辆物流四级的典型内容和不包含重复太多，重新写。", "family": "rewrite_boundaries"},
+    {"text": "参考销售服务的写法，统一这份售后服务 VOC 分类定义。", "family": "reference_style"},
+    {"text": "给三电服务分类节点补定义和排除边界。", "family": "new_energy"},
+    {"text": "只处理汽车保险金融下面的四级定义，不调整分类。", "family": "insurance_finance"},
+    {"text": "这份智能座舱 VOC 标准里的不包含写得太泛，按相邻分类边界修改。", "family": "cockpit_boundary"}
+  ],
+  "should_not_trigger": [
+    {"text": "给电商商品类目写定义。", "family": "non_automotive"},
+    {"text": "把这十万条汽车评论自动分类。", "family": "bulk_classification"},
+    {"text": "重新设计完整的汽车 VOC 分类体系。", "family": "taxonomy_redesign"},
+    {"text": "解释一下什么是 PDI。", "family": "knowledge_qna"},
+    {"text": "给公司数据字典补字段定义。", "family": "general_data_dictionary"}
+  ],
+  "near_neighbor": [
+    {"text": "评审一下汽车售后分类是否需要合并，但先不要写定义。", "family": "taxonomy_review"},
+    {"text": "把这些交付服务观点归到已有四级。", "family": "viewpoint_routing"},
+    {"text": "只帮我检查 Excel 有没有重复行。", "family": "spreadsheet_audit"}
+  ]
+}
+
