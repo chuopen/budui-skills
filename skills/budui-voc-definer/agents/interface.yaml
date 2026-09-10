@@ -1,0 +1,12 @@
+interface:
+  display_name: "汽车 VOC 分类定义"
+  short_description: "为汽车企业 VOC 二级、三级、四级分类编写定义、典型内容和排除边界"
+  default_prompt: "使用 $budui-voc-definer，读取我提供的汽车 VOC 主标准和参考文件，保持分类层级不变，为指定的二级、三级、四级分类补写定义、典型内容和不包含，并按原有顺序输出。"
+  examples: ["补充这份交付服务分类的二到四级定义", "四级典型内容和不包含重复太多，按汽车业务边界重写", "参考销售服务标准，统一售后服务的定义写法"]
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets: ["openai", "claude", "generic", "agent-skills-compatible"]
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+
