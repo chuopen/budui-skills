@@ -12,11 +12,13 @@
 - 前端项目：构建后检查实际发布目录和 `index.html`，再上传（不猜 `dist/`）
 - 任意静态站：先生成只含运行资源的发布目录，再直传
 - 自动设置 Content-Type 与缓存策略（html/js/css 不缓存）
+- `--bucket` 显式指定目标桶（优先于环境变量兜底值），运行全程打印目标桶
+- `--dry-run` 只读预演：列出将上传/将删除清单，不做任何修改
 - 默认拒绝向非空 bucket 根路径上传，避免覆盖同 bucket 的其他站点
 - 拒绝 `docs/`、`tests/`、`.git/`、`node_modules/`、锁文件和大文件进入发布包
-- 清理云端多余旧文件（仅限目标前缀内）
+- 默认不删除云端文件；`--prune` 清理多余旧文件（仅限目标前缀内，删除前先备份到 `_trash/`）
 - 配置静态网站托管：index.html 首页 + SPA 404 回退
-- 自定义域名：自动添加/更新云解析 CNAME、OSS 域名绑定（PutCname）、可选绑定 SSL 证书
+- 自定义域名：先 OSS 域名绑定（PutCname）、归属验证，成功后才改云解析 CNAME；域名已指向别的 bucket 时在任何修改前中止
 - 将 Bucket、区域、域名、发布目录和 HTTPS 状态写入 `tasks/oss-deployment.json`，后续更新沿用同一目标
 
 ## 使用
@@ -33,16 +35,18 @@ OSS_REGION=oss-cn-hangzhou
 2. 对 AI 说"把这个项目部署到 OSS / 发布到 app.budui.fun"，或直接运行：
 
 ```bash
-node scripts/deploy.mjs --source dist --state-file tasks/oss-deployment.json [--domain app.budui.fun] [--cert-dir ~/certs] [--prefix app] [--no-spa] [--no-clean]
+node scripts/deploy.mjs --source dist --bucket my-site --state-file tasks/oss-deployment.json [--domain app.budui.fun] [--cert-dir ~/certs] [--prefix app] [--prune] [--dry-run] [--no-spa]
 ```
 
 ## 隔离与覆盖保护
 
 - 一个独立站点使用一个 bucket；自定义域名不能与 `--prefix` 组合，因为 OSS 域名绑定始终落到 bucket 根路径。
+- 目标桶用 `--bucket` 显式指定；`~/.oss-deploy.env` 里的 `OSS_BUCKET` 只是兜底，属于别的站点时不能借用。
 - 若 bucket 根路径已有文件，脚本会停止。只有确认其完全属于本次站点时才使用 `--allow-existing-root`。
-- 若目标域名已有不同的 CNAME，脚本会停止。确认切换 DNS 后才使用 `--replace-domain-dns`。
+- 若目标域名已有指向别的 bucket 的 CNAME，脚本在任何修改前中止，并从 endpoint 反推正确桶名；确认迁移用 `--force`，改写已有 DNS 记录还要 `--replace-domain-dns`。
+- 默认不删除云端旧文件；`--prune` 才清理，删除前先备份到 `_trash/<时间戳>/`。清根前缀时若桶还绑着其他域名，需 `--force` 确认。
 - 单个文件默认最大 50 MB；确实需要大媒体文件时使用 `--allow-large-files`。若发布目录仍含开发文件，可显式使用 `--allow-project-source`，但它不应成为常规路径。
-- `--no-clean` 只能阻止删除旧文件，不能阻止同名文件被覆盖。
+- 删除有备份和确认，但同名文件覆盖（发新版）不需要额外确认；先 `--dry-run` 可以预览。
 
 ## 验证
 

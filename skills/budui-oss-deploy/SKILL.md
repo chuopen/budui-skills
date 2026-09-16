@@ -4,7 +4,7 @@ description: |
   将本地项目部署到阿里云 OSS 静态网站托管，自动处理独立 Bucket、budui.fun 自定义子域名、DNS 归属验证、部署状态记录与 HTTP/HTTPS 验收。适用于前端项目构建上传、静态目录直传和 SPA 404 回退；当用户说“部署到 OSS”“上传到阿里云 OSS”“发布静态网站”时使用。不适用于 CDN 加速、后端服务部署、OSS 数据迁移或管理类操作。
 metadata:
   author: 不兑 (budui)
-  version: "0.6.0"
+  version: "0.7.0"
   copyright: "Copyright (c) 不兑"
   homepage: https://github.com/chuopen/
 ---
@@ -19,7 +19,7 @@ metadata:
 2. 默认绑定 `*.budui.fun` 自定义域名，前提是当前阿里云 DNS 账号可管理 `budui.fun`。命名按项目目的生成：个人主页用 `me.budui.fun`，产品/工具使用简短项目 slug；重名或已有不同解析时停止，不改写。
 3. 用户明确只做临时预览时，才只使用 OSS 默认域名。
 4. 不得猜测或抢占外部域名。根域名不是 `budui.fun` 时，要求用户提供完整域名。
-5. 成功后写入项目 `tasks/oss-deployment.json`（不含密钥），保存 Bucket、区域、域名、发布目录和 HTTPS 状态。下次发布先读取该文件并沿用目标。
+5. 成功后写入项目 `tasks/oss-deployment.json`（不含密钥），保存 Bucket、区域、域名、发布目录和 HTTPS 状态。下次发布先读取该文件并沿用目标；**读取到 Bucket 后必须显式传 `--bucket`，不要依赖 `~/.oss-deploy.env` 的兜底值**（一台机器常管理多个站点桶，兜底值属于别的站点）。
 
 ## 首次使用引导（用户从没碰过阿里云时，按此顺序带用户做）
 
@@ -40,11 +40,12 @@ OSS_REGION=oss-cn-hangzhou
 
 4. **自定义域名前先查备案**：到 https://beian.miit.gov.cn 信息查询输入根域名。**未备案 + 大陆区域 = 绑定必失败**（报 NoSuchCnameInRecord）。未备案时的选择：走 ICP 备案（约 1-2 周，需购云服务器）或改用香港区域 `oss-cn-hongkong`（免备案，实测可行，大陆访问稍慢）。换区域注意：bucket 名全局唯一，需同时换 `OSS_BUCKET`（如加 `-hk` 后缀），脚本会自动建新 bucket 并把 CNAME 改指向新地址。
 
-## 实测证据（validated，2026-09-08）
+## 实测证据（validated，2026-09-08；v0.7.0 增补 2026-09-16）
 
 - 默认域名部署：HTTP 200（杭州 + 香港区域均验证）
 - 自定义域名免备案路线：香港区域 CNAME + TXT 归属验证 + PutCname 全自动成功，`http://job.budui.fun` 200
 - CNAME/TXT 跨区域迁移：脚本自动把已有记录**更新**到新地址，无需手动清理
+- v0.7.0：`--dry-run` 计划正确；复现 09-14 事故路径（env 兜底桶 + `--domain me.budui.fun`）在任何修改前中止并提示正确桶名；正确桶 `--prune` 完整部署线上 200
 - 限制：未绑证书时 `https://<自定义域名>` 返回 OSS 默认证书（域名不匹配），浏览器告警——属预期，绑证书前一律给用户 http 地址
 
 ## 工作流
@@ -56,13 +57,22 @@ OSS_REGION=oss-cn-hangzhou
 5. 运行：
 
 ```bash
-node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> --state-file tasks/oss-deployment.json [--domain <子域名>] [--cert-dir <证书目录>] [--prefix <云端子目录>] [--no-spa]
+node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> --bucket <桶名> --state-file tasks/oss-deployment.json [--domain <子域名>] [--cert-dir <证书目录>] [--prefix <云端子目录>] [--prune] [--dry-run] [--force] [--no-spa]
 ```
 
-脚本自动完成：发布目录卫生检查 → 创建 bucket（公共读，自动关闭账号级和 bucket 级"阻止公共访问"）→ 上传（正确 Content-Type + 缓存策略）→ 清理前缀内旧文件 → 静态网站托管（index + SPA 404 回退）→ 自定义域名（CNAME → TXT 归属验证（自动等待 90 秒）→ PutCname 绑定）。
+脚本自动完成：域名归属前置校验（`--domain` 的现有 CNAME 指向别的桶 → 任何修改前中止并从 endpoint 反推正确桶名）→ 发布目录卫生检查 → 创建 bucket（公共读，自动关闭账号级和 bucket 级"阻止公共访问"）→ 上传（正确 Content-Type + 缓存策略）→ 静态网站托管（index + SPA 404 回退）→ PutCname 绑定（**先绑定、后改 DNS**，绑定失败 DNS 保持原样）→ 自定义域名（TXT 归属验证自动等待 90 秒 → 绑定 → CNAME）。
 
-5. 部署后验证自定义域名的 DNS CNAME、首页正文、关键 CSS 与至少一张站内图片均返回 200，并检查 Content-Type；SPA 再验证深层路径刷新。
-6. 向用户报告自定义域名而非 Bucket 地址。HTTPS 只有证书生效并返回 200 时才能标记“正式上线”；否则明确标记“HTTP 已上线，HTTPS 待完成”。
+6. 不确定目标桶或清理影响时，先加 `--dry-run` 预演（只读，列出将上传/将删除清单）。
+
+7. 部署后验证自定义域名的 DNS CNAME、首页正文、关键 CSS 与至少一张站内图片均返回 200，并检查 Content-Type；SPA 再验证深层路径刷新。
+8. 向用户报告自定义域名而非 Bucket 地址。HTTPS 只有证书生效并返回 200 时才能标记“正式上线”；否则明确标记“HTTP 已上线，HTTPS 待完成”。
+
+## 删除语义（v0.7.0 变更，防误删）
+
+- **默认只上传，不删任何云端文件**。发现目标前缀里有云端多余旧文件时只打印数量，不动手。
+- `--prune` 才会清理多余旧文件，且删除前先 CopyObject 备份到 `_trash/<时间戳>/` 前缀。
+- `--prune` 清根前缀（`--prefix` 为空）时，若桶上还绑着 `--domain` 以外的其他域名 → 中止（多站点共用桶的信号），确认只此一站加 `--force`；多站请用独立 bucket。
+- `--no-clean` 已废弃（默认行为即不删除），仅为兼容保留。
 
 ## 已知坑（实战踩过，脚本已内置对策）
 
@@ -78,6 +88,7 @@ node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> --state-file 
 | Git Bash 下 `/tmp` 路径变成 `D:\tmp` 或 8.3 短路径 | staging 目录用 Windows 原生绝对路径，脚本内部已用 realpath + 相对路径算 key |
 | alidns SDK v3 `Alidns is not a constructor` / `request.validate is not a function` | 用 createRequire 取 `.default`，请求必须用模型类实例化 |
 | `ali-oss` 无 PutCname/CreateCnameToken API | 脚本内置 OSS V1 签名（node:crypto）直接调 |
+| **2026-09-14 事故**：env 兜底桶 `budui-site-hk`（绑 job.budui.fun）被当成另一站点的目标桶，默认清理删掉 55 个旧文件，CNAME 还被改走 | v0.7.0 已内置对策：`--bucket` 显式指定 + 默认不删（`--prune` 才删且先进 `_trash/`）+ 域名归属前置校验（发错桶在任何修改前中止并提示正确桶名）+ 多站点桶清理需 `--force` + 先绑定后改 DNS。AI 使用此 skill 时必须执行"先定桶"：从项目 `tasks/oss-deployment.json` 取桶名并显式传 `--bucket` |
 
 ## 证书（HTTPS，自定义域名时）
 
@@ -93,11 +104,13 @@ node "<本skill目录>/scripts/deploy.mjs" --source <发布目录> --state-file 
 
 - 密钥只从环境变量或 `~/.oss-deploy.env` 读取；不进代码、仓库、对话。
 - 证书私钥只放用户本地目录。
+- 目标桶必须显式化：`--bucket` 优先于 `OSS_BUCKET` 环境变量；运行全程打印目标桶。
 - 默认拒绝向非空 bucket 根路径部署；这可能覆盖同 bucket 的其他域名。独立站点必须使用独立 bucket，只有读取到同项目的 `tasks/oss-deployment.json` 且确认 Bucket 一致时才允许 `--allow-existing-root`。
 - `--prefix` 只隔离对象路径，不能隔离自定义域名；带 `--domain` 的独立站点必须用独立 bucket。
 - 发布源必须是干净产物目录；默认拒绝 `.git`、`docs`、`tests`、`tasks`、`node_modules`、锁文件及超过 50 MB 的文件。例外必须显式传 `--allow-project-source` 或 `--allow-large-files`。
-- 默认不改写已有 CNAME；确认域名切换后才传 `--replace-domain-dns`。
-- `--no-clean` 只停止删除旧文件，不能阻止同名文件被覆盖。
+- 默认不改写已有 CNAME；确认域名切换后才传 `--replace-domain-dns`。`--domain` 现有 CNAME 指向别的桶时，任何修改前中止（迁移需 `--force`）。
+- 删除是显式行为：默认只上传不删；`--prune` 才清理且先备份到 `_trash/`；清根前缀遇多站点桶需 `--force`。
+- `--no-clean` 已废弃：默认即不删除，但它不能阻止同名文件被覆盖。
 
 ## 故障排查（错误码 → 用户动作）
 
