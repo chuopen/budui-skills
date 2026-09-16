@@ -3,6 +3,16 @@
  * budui-oss-deploy: 上传静态目录到阿里云 OSS，配置静态网站托管；
  * 可选绑定自定义域名（CNAME + OSS PutCname，可带 SSL 证书）。
  * 密钥只从环境变量读取：OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET / OSS_BUCKET / OSS_REGION
+ *
+ * v0.7.0 安全模型（2026-09-14 me.budui.fun 误清 job.budui.fun 事故复审后引入）：
+ * 1. 目标桶显式化：--bucket > OSS_BUCKET 环境变量 > ~/.oss-deploy.env 兜底，全程打印目标桶
+ * 2. 删除是显式行为：默认只上传不删；清理云端多余旧文件必须加 --prune
+ * 3. --prune 删除前进回收站：被删 key 先 CopyObject 到 _trash/<时间戳>/ 再删
+ * 4. 域名归属前置校验：--domain 的现有 CNAME 指向别的桶时，任何写操作之前中止，
+ *    并从 endpoint 反推桶名给出建议（防"发错桶还改走 DNS"）
+ * 5. 先绑定后改 DNS：PutCname 成功后才动 CNAME 记录，绑定失败 DNS 保持原样
+ * 6. 多站点桶保护：--prune 清根前缀时，若桶还绑着 --domain 以外的域名，要求 --force
+ * 7. --dry-run 只读预演：打印将上传/将删除清单，不做任何修改
  */
 import { parseArgs } from "node:util";
 import { readdir, stat, readFile, realpath, mkdir, writeFile } from "node:fs/promises";
@@ -131,6 +141,47 @@ async function createCnameToken(env, domain) {
   return { token: xml.match(/<Token>([^<]+)<\/Token>/)?.[1] };
 }
 
+/** OSS GetCname：列出桶上已绑定的自定义域名（多站点桶检测用） */
+async function listBucketCnames(env) {
+  try {
+    const xml = await signedOss(env, "GET", "cname");
+    return [...xml.matchAll(/<Domain>([^<]+)<\/Domain>/g)].map((m) => m[1]);
+  } catch { /* 无权限或无绑定：按空处理，不阻断 */ return []; }
+}
+
+/** 查询域名当前 CNAME 记录值（域名归属前置校验用），查不到返回 [] */
+async function currentCnameValues({ accessKeyId, accessKeySecret }, domain) {
+  const D = require("@alicloud/alidns20150109");
+  const { Config } = require("@alicloud/openapi-client");
+  const client = new D.default(new Config({ accessKeyId, accessKeySecret, endpoint: "alidns.aliyuncs.com" }));
+  const existing = await client.describeSubDomainRecords(
+    new D.DescribeSubDomainRecordsRequest({ subDomain: domain, type: "CNAME", pageSize: 20 })
+  );
+  return (existing.body?.domainRecords?.record || []).map((r) => r.value);
+}
+
+/** 域名归属前置校验：--domain 现有 CNAME 指向别的桶时中止（在任何写操作之前调用） */
+async function guardDomainOwnership(env, domain, force, dry) {
+  const mine = `${env.bucket}.${env.region}.aliyuncs.com`;
+  let values;
+  try {
+    values = await currentCnameValues(env, domain);
+  } catch (e) {
+    console.warn(`  ⚠ 无法查询 ${domain} 的 DNS 记录（跳过归属校验；后续 --replace-domain-dns 保护仍在）: ${e.message}`);
+    return;
+  }
+  const foreign = values.filter((v) => v !== mine);
+  if (!foreign.length) return;
+  const other = foreign.find((v) => /^[\w-]+\.oss-[\w-]+\.aliyuncs\.com$/i.test(v));
+  console.error(`\n中止：${domain} 的 CNAME 当前指向 ${foreign.join("、")}，不是本次目标桶 ${env.bucket}。`);
+  if (other) {
+    const otherBucket = other.split(".")[0];
+    console.error(`该 endpoint 属于桶 ${otherBucket} —— 若这才是正确目标，重跑加 --bucket ${otherBucket}。`);
+  }
+  console.error(`确认要把 ${domain} 迁移到 ${env.bucket} 的话，加 --force 重跑（DNS 改写仍需 --replace-domain-dns）。${dry ? "（--dry-run 未做任何修改）" : "未做任何修改。"}`);
+  process.exit(1);
+}
+
 /** 在阿里云 DNS 添加/更新记录（type: CNAME/TXT），返回是否新添加 */
 async function ensureDnsRecord({ accessKeyId, accessKeySecret }, domain, type, value, allowReplace = false) {
   const D = require("@alicloud/alidns20150109");
@@ -168,22 +219,26 @@ async function main() {
     options: {
       source: { type: "string", short: "s" },
       prefix: { type: "string", short: "p", default: "" },
+      bucket: { type: "string", short: "b" },
       domain: { type: "string", short: "d" },
       "cert-dir": { type: "string" },
       "no-spa": { type: "boolean", default: false },
-      "no-clean": { type: "boolean", default: false },
+      prune: { type: "boolean", default: false },
+      force: { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
       "allow-existing-root": { type: "boolean", default: false },
       "allow-project-source": { type: "boolean", default: false },
       "allow-large-files": { type: "boolean", default: false },
       "max-file-size-mb": { type: "string", default: "50" },
       "replace-domain-dns": { type: "boolean", default: false },
       "state-file": { type: "string" },
+      "no-clean": { type: "boolean", default: false }, // 已废弃：v0.7.0 起默认就不删除，仅为兼容保留
     },
   });
   const env = {
     accessKeyId: process.env.OSS_ACCESS_KEY_ID,
     accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
-    bucket: process.env.OSS_BUCKET,
+    bucket: values.bucket || process.env.OSS_BUCKET,
     region: process.env.OSS_REGION,
   };
   const missing = Object.entries(env).filter(([, v]) => !v).map(([k]) => `OSS_${k.replace(/[A-Z]/g, (c) => "_" + c).toUpperCase()}`);
@@ -191,10 +246,19 @@ async function main() {
     console.error(`缺少环境变量: ${missing.join(", ")}\n请设置后重试（密钥来自阿里云 RAM 控制台，不要写入文件）。`);
     process.exit(1);
   }
+  if (values["no-clean"] && !values.prune) {
+    console.log("提示: --no-clean 已废弃（v0.7.0 起默认就不删除云端文件；需要清理改用 --prune）。");
+  }
   if (!values.source) {
-    console.error("用法: deploy.mjs --source <发布目录> [--prefix <子目录>] [--domain <xxx.budui.fun>] [--cert-dir <证书目录>] [--state-file <项目部署状态 JSON>] [--allow-existing-root] [--allow-project-source] [--allow-large-files] [--replace-domain-dns] [--no-spa] [--no-clean]");
+    console.error("用法: deploy.mjs --source <发布目录> --bucket <桶名> [--prefix <子目录>] [--domain <xxx.budui.fun>] [--cert-dir <证书目录>] [--state-file <项目部署状态 JSON>] [--prune] [--dry-run] [--force] [--allow-existing-root] [--allow-project-source] [--allow-large-files] [--replace-domain-dns] [--no-spa]");
     process.exit(1);
   }
+  const dry = values["dry-run"];
+  console.log(`目标桶: oss://${env.bucket}（${env.region}）${values.bucket ? "（--bucket 显式指定）" : "（来自环境变量，建议项目固定用 --bucket 指定）"}`);
+  if (dry) console.log("—— dry-run：只打印计划，不做任何修改 ——\n");
+
+  // 域名归属前置校验：在任何写操作之前（防发错桶 + 改走 DNS）
+  if (values.domain) await guardDomainOwnership(env, values.domain, values.force, dry);
 
   const prefix = values.prefix ? values.prefix.replace(/\/+$/, "") + "/" : "";
   if (values.domain && prefix) {
@@ -228,15 +292,19 @@ async function main() {
   try {
     await client.getBucketInfo(env.bucket);
   } catch {
-    console.log(`bucket ${env.bucket} 不存在，自动创建…`);
-    await client.putBucket(env.bucket);
+    if (dry) {
+      console.log(`[dry-run] bucket ${env.bucket} 不存在，正式运行将自动创建`);
+    } else {
+      console.log(`bucket ${env.bucket} 不存在，自动创建…`);
+      await client.putBucket(env.bucket);
+    }
     fresh = true;
   }
   const existingObjects = fresh ? [] : await listObjectNames(client, prefix);
   if (!fresh && !prefix && existingObjects.length && !values["allow-existing-root"]) {
     throw new Error(`bucket ${env.bucket} 根路径已有 ${existingObjects.length} 个对象。为避免覆盖同 bucket 的其他站点，拒绝部署。请改用独立 bucket；仅在已确认该根路径完全属于当前站点时才加 --allow-existing-root。`);
   }
-  {
+  if (!dry) {
     const acl = (await client.getBucketACL(env.bucket)).acl || "private";
     if (acl !== "public-read") {
       try {
@@ -249,9 +317,7 @@ async function main() {
         throw new Error(`设置公共读失败: ${e.message}\n请到 OSS 控制台 → ${env.bucket} → 权限管理 → 阻止公共访问，手动关闭后重试。`);
       }
     }
-  }
-  // 匿名访问自检；失败则尝试关闭账号级"阻止公共访问"并重设 ACL
-  {
+    // 匿名访问自检；失败则尝试关闭账号级"阻止公共访问"并重设 ACL
     const probe = await fetch(`https://${env.bucket}.${env.region}.aliyuncs.com/index.html`, { method: "HEAD" });
     if (!probe.ok) {
       console.log("匿名访问被拒，尝试关闭“阻止公共访问”（bucket 级 + 账号级）并重设公共读…");
@@ -268,8 +334,9 @@ async function main() {
   console.log(`待上传 ${files.length} 个文件 → oss://${env.bucket}/${prefix}`);
 
   for (const f of files) {
-    const body = await readFile(f.local);
     const mime = MIME[extname(f.local).toLowerCase()] || "application/octet-stream";
+    if (dry) { console.log(`  [将上传] ${prefix}${f.key}`); continue; }
+    const body = await readFile(f.local);
     // html/js/css 不缓存，其余缓存 1 天，避免发版后浏览器用旧资源
     const cache = /\.(html|js|css)$/.test(f.key) ? "no-cache" : "max-age=86400";
     const key = `${prefix}${f.key}`;
@@ -277,17 +344,38 @@ async function main() {
     console.log(`  ✓ ${key}`);
   }
 
-  if (!values["no-clean"]) {
-    // 仅清理目标前缀内的云端多余旧文件
-    const remote = await listObjectNames(client, prefix);
-    const localKeys = new Set(files.map((f) => `${prefix}${f.key}`));
-    const stale = remote.filter((k) => !localKeys.has(k));
-    if (stale.length) {
-      console.log(`清理 ${stale.length} 个云端多余旧文件…`);
+  // 清点目标前缀内的云端多余旧文件；删除必须显式 --prune（先备份再删）
+  const remote = dry && fresh ? [] : await listObjectNames(client, prefix);
+  const localKeys = new Set(files.map((f) => `${prefix}${f.key}`));
+  const stale = remote.filter((k) => !localKeys.has(k));
+  if (stale.length && !values.prune) {
+    console.log(`发现 ${stale.length} 个云端多余旧文件，本次未删除（确认要清理加 --prune，删除前会备份到 _trash/）。`);
+  }
+  if (stale.length && values.prune) {
+    // 多站点桶保护：清根前缀时，桶若还绑着 --domain 以外的域名，清理会殃及其他站点
+    const bound = await listBucketCnames(env);
+    const others = bound.filter((d) => d !== values.domain);
+    if (!prefix && others.length && !values.force) {
+      console.error(`\n中止：--prune 要清理 oss://${env.bucket}/ 根前缀，但该桶还绑着其他域名: ${others.join("、")}。`);
+      console.error(`这通常意味着多个站点共用此桶，清理会连带删掉别的站。确认只此一站请加 --force；多站请改用独立 bucket。未做任何修改。`);
+      process.exit(1);
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    console.log(`${dry ? "[dry-run] 将清理" : "清理"} ${stale.length} 个云端多余旧文件${dry ? "" : "（已备份到 _trash/" + stamp + "/）"}…`);
+    if (!dry) {
+      for (const k of stale) await client.copy(`_trash/${stamp}/${k}`, k);
       for (let i = 0; i < stale.length; i += 100) {
         await client.deleteMulti(stale.slice(i, i + 100).map((k) => ({ key: k })));
       }
+    } else {
+      stale.forEach((k) => console.log(`  [将删除] ${k}`));
     }
+  }
+
+  if (dry) {
+    console.log(`\n[dry-run] 计划完成：上传 ${files.length} 个、删除 ${values.prune ? stale.length : 0} 个；网站托管 index=index.html error=${prefix}index.html${values.domain ? `；域名 ${values.domain} 将绑定（归属校验已通过）` : ""}。`);
+    console.log(`去掉 --dry-run 正式执行。`);
+    return;
   }
 
   // 静态网站托管：index 首页 + 404 回退（SPA 路由）
@@ -303,15 +391,10 @@ async function main() {
   let domainBound = false;
   console.log(`\n部署完成 ✔`);
 
-  // 自定义域名：CNAME + PutCname（可带证书）；必要时走归属验证（CnameToken + TXT）
+  // 自定义域名：先 PutCname 绑定（含归属验证），绑定成功后才改 CNAME 指向 —— 绑定失败不动 DNS
   if (values.domain) {
     const target = `${env.bucket}.${env.region}.aliyuncs.com`;
     console.log(`配置自定义域名 ${values.domain}…`);
-    try {
-      await ensureDnsRecord(env, values.domain, "CNAME", target, values["replace-domain-dns"]);
-    } catch (e) {
-      throw new Error(`自定义域名 DNS 未就绪：${e.message}\n请手动添加 CNAME ${values.domain} → ${target} 后重试；若要改写已有记录，显式传 --replace-domain-dns。`);
-    }
     let cert, key;
     if (values["cert-dir"]) {
       try {
@@ -321,32 +404,44 @@ async function main() {
         console.warn(`  ⚠ 证书目录读取失败（需要 cert.pem 和 key.pem），将以 HTTP-only 绑定域名`);
       }
     }
-    try {
-      await putCname(env, values.domain, cert, key);
-      domainBound = true;
-      if (cert) scheme = "https";
-      console.log(cert ? `  ✓ 域名已绑定并开启 HTTPS（证书需覆盖 ${values.domain}）` : `  ✓ 域名已绑定（HTTP）`);
-    } catch (e) {
-      if (String(e.message).includes("NeedVerifyDomainOwnership")) {
-        console.log(`  域名归属验证：创建 CnameToken 并添加 TXT 记录…`);
-        const { token } = await createCnameToken(env, values.domain);
-        let txtOk = true;
-        try {
-          await ensureDnsRecord(env, `_dnsauth.${values.domain}`, "TXT", token, true);
-        } catch (e2) {
-          txtOk = false;
-          console.warn(`  ⚠ TXT 记录添加失败，请手动添加：主机记录 _dnsauth、类型 TXT、记录值 ${token}`);
-        }
-        if (txtOk) {
-          console.log(`  等待 TXT 记录生效（约 1-2 分钟）…`);
-          await new Promise((r) => setTimeout(r, 90_000));
-        }
+    const tryBind = async () => {
+      try {
         await putCname(env, values.domain, cert, key);
         domainBound = true;
         if (cert) scheme = "https";
         console.log(cert ? `  ✓ 域名已绑定并开启 HTTPS（证书需覆盖 ${values.domain}）` : `  ✓ 域名已绑定（HTTP）`);
-      } else {
-        console.warn(`  ⚠ 域名绑定失败（可能已绑定过，或证书无效）: ${e.message}`);
+        return true;
+      } catch (e) {
+        if (String(e.message).includes("NeedVerifyDomainOwnership")) {
+          console.log(`  域名归属验证：创建 CnameToken 并添加 TXT 记录…`);
+          const { token } = await createCnameToken(env, values.domain);
+          let txtOk = true;
+          try {
+            await ensureDnsRecord(env, `_dnsauth.${values.domain}`, "TXT", token, true);
+          } catch (e2) {
+            txtOk = false;
+            console.warn(`  ⚠ TXT 记录添加失败，请手动添加：主机记录 _dnsauth、类型 TXT、记录值 ${token}`);
+          }
+          if (txtOk) {
+            console.log(`  等待 TXT 记录生效（约 1-2 分钟）…`);
+            await new Promise((r) => setTimeout(r, 90_000));
+          }
+          await putCname(env, values.domain, cert, key);
+          domainBound = true;
+          if (cert) scheme = "https";
+          console.log(cert ? `  ✓ 域名已绑定并开启 HTTPS（证书需覆盖 ${values.domain}）` : `  ✓ 域名已绑定（HTTP）`);
+          return true;
+        }
+        console.warn(`  ⚠ 域名绑定失败（DNS 保持原样，站点不受影响）: ${e.message}`);
+        return false;
+      }
+    };
+    const bound = await tryBind();
+    if (bound) {
+      try {
+        await ensureDnsRecord(env, values.domain, "CNAME", target, values["replace-domain-dns"] || values.force);
+      } catch (e) {
+        console.warn(`  ⚠ DNS 记录未改写（可手动添加 CNAME ${values.domain} → ${target}；确认切换后加 --replace-domain-dns）: ${e.message}`);
       }
     }
     console.log(`  提示: DNS 生效一般数分钟内；证书每年需在阿里云控制台续领免费证书后更新 cert-dir 重跑。`);
