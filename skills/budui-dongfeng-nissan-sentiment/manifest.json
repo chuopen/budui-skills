@@ -1,0 +1,19 @@
+{
+  "name": "budui-dongfeng-nissan-sentiment",
+  "version": "0.1.0",
+  "description": "东风日产公域舆情监控与结构化数据采集",
+  "author": "不兑 (budui)",
+  "owner": "不兑 (budui)",
+  "license": "MIT",
+  "entry": "SKILL.md",
+  "updated_at": "2026-09-23T08:50:00+08:00",
+  "status": "draft",
+  "maturity_tier": "scaffold",
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "agents/interface.yaml",
+    "references/output-schema.md",
+    "evals/trigger_cases.json"
+  ]
+}
