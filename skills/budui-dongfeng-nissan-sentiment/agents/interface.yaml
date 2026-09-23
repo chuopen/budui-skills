@@ -1,0 +1,39 @@
+interface:
+  display_name: 东风日产舆情采集
+  short_description: 搜索公域平台车型声音，输出带情感标签的结构化JSON
+  default_prompt: "帮我查一下天籁最近的舆情"
+  inputs:
+    car_model:
+      type: string
+      required: false
+      description: 目标车型名称，如"天籁""轩逸"；缺省时使用热门车型列表
+    time_range:
+      type: string
+      required: false
+      description: 时间范围，如"近7天""近30天"；默认近7天
+    focus_topics:
+      type: array
+      items:
+        type: string
+      required: false
+      description: 关注维度，如["油耗","智驾"]；默认空
+    max_results:
+      type: integer
+      required: false
+      description: 单车型最大采集条数；默认30
+  outputs:
+    sentiment_file:
+      type: file
+      format: json
+      description: 结构化舆情数据文件，包含 metadata 和 items
+  tools_required:
+    - WebSearch
+    - Write
+    - Read
+
+compatibility:
+  adapter_targets:
+    - openai
+    - claude
+    - generic
+    - agent-skills-compatible
