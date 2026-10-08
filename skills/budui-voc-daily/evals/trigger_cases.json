@@ -1,0 +1,38 @@
+{
+  "should_trigger": [
+    {
+      "id": "daily-report-with-date",
+      "input": "（上传《人工校验VOC明细.xlsx》）出 9 月 12 号的日报",
+      "expect_behavior": "inspect 探测 → 车系清单不在对话里则必须先问哪个车系是新车 → 确认后 generate → 汇报总量/负面占比/话题与两个文件路径"
+    },
+    {
+      "id": "today-new-car",
+      "input": "帮我出今天的新 N7 车系日报",
+      "expect_behavior": "车系已说明（匹配 inspect 车系清单中的 N7，不重复问）；日期'今天'换算为当日；未上传文件时先向用户要 Excel"
+    },
+    {
+      "id": "multi-series-with-group",
+      "input": "N6 和 NX8 都出一份，车友群截图里的要点也放进去",
+      "expect_behavior": "两个车系各跑一次 generate 产两份日报；车友群截图提取要点后经 --group-extra 传入"
+    }
+  ],
+  "near_neighbor": [
+    {
+      "id": "date-out-of-range",
+      "input": "生成日报，就用 9 月 20 号的数据",
+      "expect_behavior": "日期超出数据范围时脚本报错并列出可用日期，把可用日期如实告诉用户，不得自行改日期"
+    }
+  ],
+  "should_not_trigger": [
+    {
+      "id": "model-accuracy",
+      "input": "这份表里模型和人工打标一致率多少？",
+      "expect_behavior": "属于模型准确率监控，不生成日报；直接答复或说明超出本技能边界"
+    },
+    {
+      "id": "weekly-aggregation",
+      "input": "把上周每天的负面拉个周汇总",
+      "expect_behavior": "周报聚合不是日报，不使用本技能；可说明边界并按普通分析处理"
+    }
+  ]
+}
