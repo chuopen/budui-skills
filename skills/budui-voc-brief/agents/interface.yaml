@@ -1,0 +1,61 @@
+interface:
+  display_name: "VOC 专项简报"
+  short_description: "把批量 VOC 的一个主题做成可溯源的专项简报"
+  default_prompt: "Use $budui-voc-brief to analyze one topic in my VOC data and generate a traceable local brief."
+  examples:
+    - "分析一下轮胎爆胎问题"
+    - "帮我做个发动机异响的简报"
+    - "座椅口碑怎么样，出一份简报"
+    - "做发动机异响简报，用深海蓝图"
+  exclusions:
+    - "单条或少量 VOC 判产品还是服务 → voc-router"
+    - "单条 VOC 拆成七要素 → voc-viewpoint-split"
+    - "单条 VOC 归入产品/服务分类树 → voc-product-classify / voc-service-classify"
+    - "分类标准建立、评审或改版 → budui-voc-classifier / budui-voc-definer"
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "generic"
+    - "agent-skills-compatible"
+    - "openai"
+    - "claude"
+  activation:
+    mode: "auto"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "bash"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+  permissions:
+    network: "lark-cli only after the user explicitly requests a Feishu push"
+    file_write: "user working directory only unless the user specifies another path"
+    subprocess: "bundled Python scripts and headless Chrome/Edge for rendering"
+inputs:
+  required:
+    - "data file: user-supplied CSV of VOC records; never guess or scan for it"
+    - "topic: natural-language problem description; typos allowed"
+  optional_with_defaults:
+    - "report period: day | week | month; default week"
+    - "target model and baseline model: only when the user needs model-specific comparison"
+    - "visual theme: 琥珀晨曦 by default"
+outputs:
+  contract: "local Excel, HTML, PNG and PDF when rendering dependencies are available"
+  files:
+    - "<topic>专项简报_明细.xlsx（含数据溯源 sheet）"
+    - "<topic>专项简报.html"
+    - "<topic>专项简报.png"
+    - "<topic>专项简报.pdf"
+  traceability:
+    - "source file SHA-256 and scope SHA-256"
+    - "source ID when available plus CSV row number on every detail row and quote"
+  push:
+    timing: "only after explicit user request"
+    target: "self by default; group or another user requires explicit confirmation"
+gates:
+  scaffold:
+    - "SKILL.md frontmatter"
+    - "runtime resource preflight before poster rendering"
+    - "data lineage preserved in detail and trace outputs"
+    - "no automatic external delivery"

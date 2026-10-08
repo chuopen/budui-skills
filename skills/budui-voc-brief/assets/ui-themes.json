@@ -1,0 +1,147 @@
+{
+  "version": "1.0.0",
+  "default": "amber-dawn",
+  "presets": {
+    "amber-dawn": {
+      "name": "琥珀晨曦",
+      "aliases": [
+        "橙色",
+        "橙",
+        "暖橙",
+        "amber",
+        "orange"
+      ],
+      "description": "温暖、直接，适合常规专项简报。",
+      "tokens": {
+        "primary": "#F5820B",
+        "primary_deep": "#EA7000",
+        "primary_dark": "#C4620A",
+        "primary_bright": "#FFA53B",
+        "primary_mid": "#FFB347",
+        "primary_light": "#FFCF8C",
+        "primary_pale": "#FFD8A8",
+        "primary_bg": "#FFF7EC",
+        "primary_card": "#FFFBF4",
+        "primary_border": "#F7E7CF",
+        "primary_dash": "#F0E2CE",
+        "primary_grid": "#F2E7D8",
+        "primary_base": "#F7F2EA",
+        "primary_head": "#FFF3E2",
+        "primary_shadow": "rgba(245,130,11,.30)"
+      }
+    },
+    "ocean-blueprint": {
+      "name": "深海蓝图",
+      "aliases": [
+        "蓝色",
+        "蓝",
+        "科技蓝",
+        "blue",
+        "ocean"
+      ],
+      "description": "冷静、理性，适合工程质量和管理层复盘。",
+      "tokens": {
+        "primary": "#2878D4",
+        "primary_deep": "#135AB8",
+        "primary_dark": "#1B4E91",
+        "primary_bright": "#4B93E5",
+        "primary_mid": "#64A5EC",
+        "primary_light": "#A8CEF5",
+        "primary_pale": "#D5E9FC",
+        "primary_bg": "#F4F8FE",
+        "primary_card": "#FBFDFF",
+        "primary_border": "#D9E8F8",
+        "primary_dash": "#DCEAF6",
+        "primary_grid": "#E9F2FB",
+        "primary_base": "#F4F7FB",
+        "primary_head": "#EAF4FF",
+        "primary_shadow": "rgba(40,120,212,.24)"
+      }
+    },
+    "jade-signal": {
+      "name": "青岚信号",
+      "aliases": [
+        "青绿",
+        "绿色",
+        "绿",
+        "teal",
+        "jade",
+        "green"
+      ],
+      "description": "清爽、稳定，适合服务体验和持续改善主题。",
+      "tokens": {
+        "primary": "#079781",
+        "primary_deep": "#057968",
+        "primary_dark": "#075C52",
+        "primary_bright": "#2CAE9B",
+        "primary_mid": "#48BCAA",
+        "primary_light": "#A8DDD4",
+        "primary_pale": "#D2EEE8",
+        "primary_bg": "#F1FAF8",
+        "primary_card": "#FBFEFD",
+        "primary_border": "#D6EEE8",
+        "primary_dash": "#DCEFEA",
+        "primary_grid": "#E7F5F1",
+        "primary_base": "#F2F8F6",
+        "primary_head": "#E8F7F3",
+        "primary_shadow": "rgba(7,151,129,.24)"
+      }
+    },
+    "violet-insight": {
+      "name": "紫曜洞察",
+      "aliases": [
+        "紫色",
+        "紫",
+        "violet",
+        "purple"
+      ],
+      "description": "克制、有区分度，适合智能座舱和创新体验主题。",
+      "tokens": {
+        "primary": "#7557C9",
+        "primary_deep": "#5840A9",
+        "primary_dark": "#463287",
+        "primary_bright": "#9579DF",
+        "primary_mid": "#A58CE4",
+        "primary_light": "#CBBBF1",
+        "primary_pale": "#E4DCF8",
+        "primary_bg": "#F7F4FD",
+        "primary_card": "#FCFBFF",
+        "primary_border": "#E6DFF7",
+        "primary_dash": "#E9E3F6",
+        "primary_grid": "#F0EBF9",
+        "primary_base": "#F6F3FA",
+        "primary_head": "#F0EBFB",
+        "primary_shadow": "rgba(117,87,201,.24)"
+      }
+    },
+    "obsidian-order": {
+      "name": "曜石极简",
+      "aliases": [
+        "灰色",
+        "灰",
+        "黑白",
+        "slate",
+        "gray",
+        "grey"
+      ],
+      "description": "低饱和、克制，适合高层汇报和正式归档。",
+      "tokens": {
+        "primary": "#546B86",
+        "primary_deep": "#40566F",
+        "primary_dark": "#33485F",
+        "primary_bright": "#71869E",
+        "primary_mid": "#879AAC",
+        "primary_light": "#C1CCD6",
+        "primary_pale": "#DEE5EB",
+        "primary_bg": "#F5F7F9",
+        "primary_card": "#FCFDFE",
+        "primary_border": "#E0E7ED",
+        "primary_dash": "#E3E9EE",
+        "primary_grid": "#EDF1F4",
+        "primary_base": "#F4F6F8",
+        "primary_head": "#EEF2F5",
+        "primary_shadow": "rgba(84,107,134,.20)"
+      }
+    }
+  }
+}
