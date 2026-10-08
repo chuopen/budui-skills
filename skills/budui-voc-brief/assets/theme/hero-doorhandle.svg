@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 250" role="img" aria-label="doorhandle technical illustration">
+  <defs>
+    <radialGradient id="wash"><stop stop-color="#FFCF8C" stop-opacity=".34"/><stop offset="1" stop-color="#FFF7EC" stop-opacity="0"/></radialGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFFBF4" stop-opacity=".7"/><stop offset=".65" stop-color="#FFD8A8" stop-opacity=".32"/><stop offset="1" stop-color="#F5820B" stop-opacity=".08"/></linearGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="8"/></filter>
+    <g id="subject" fill="url(#face)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.1">
+      <path d="M13 48 Q17 39 29 38 L76 32 Q89 31 91 41 L92 56 Q91 66 80 67 L26 73 Q13 74 12 63 Z" fill="#FFFBF4"/>
+      <path d="M22 50 Q26 44 34 43 L74 38 Q83 37 85 44 L85 51 Q84 55 77 56 L32 62 Q25 62 22 56 Z" fill="#FFD8A8" fill-opacity=".55"/>
+      <path d="M30 44 L74 39 Q80 39 80 44 L78 49 Q76 52 72 52 L33 57 Q28 57 27 53 Q26 48 30 44 Z" fill="#FFFBF4"/>
+      <path d="M29 54 Q47 52 74 48 M32 44 L35 55 M75 39 L74 49" stroke-width="1.25" opacity=".7"/>
+      <path d="M19 65 Q44 66 83 59" stroke-width="1.1" opacity=".65"/>
+      <circle cx="86" cy="61" r="1.3" fill="#F5820B" stroke="none"/></g>
+  </defs>
+  <ellipse cx="211" cy="119" rx="123" ry="105" fill="url(#wash)"/>
+  <g fill="none" stroke="#C4620A" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M88 74 Q140 22 234 21 Q282 22 308 51 L317 66 L106 83 Z" fill="#FFF7EC" fill-opacity=".52" stroke-width="1.4" opacity=".38"/>
+    <path d="M104 82 L316 65 M109 82 L110 214 Q212 228 315 202 M313 67 L315 202" stroke-width="1.65" opacity=".46"/>
+    <path d="M115 185 Q213 182 316 165 M121 217 Q216 218 308 196" stroke-width="1.2" opacity=".31"/>
+    <path d="M250 24 L261 72" stroke-width="1.4" opacity=".3"/>
+  </g>
+  <g fill="none" stroke="#F5820B" stroke-width="1" opacity=".15">
+    <path d="M32 211 L303 176 M55 229 L310 198 M95 236 L314 219 M88 72 L295 35 M119 52 L280 16"/>
+    <path d="M67 175 Q172 226 310 153 M89 55 Q193 5 296 53" stroke-dasharray="3 6"/>
+    <circle cx="224" cy="118" r="96" stroke-dasharray="2 8"/>
+    <circle cx="224" cy="118" r="112" stroke-dasharray="1 11"/>
+  </g>
+  <ellipse cx="224" cy="209" rx="81" ry="12" fill="#C4620A" opacity=".16" filter="url(#blur)"/>
+  <g transform="translate(84 12) scale(2.2)">
+    <use href="#subject" transform="translate(5 7)" fill="none" stroke="#C4620A" opacity=".18" stroke-width="3.6"/>
+    <use href="#subject" transform="translate(2 3)" fill="none" stroke="#FFB347" opacity=".52" stroke-width="3"/>
+    <use href="#subject" stroke="#C4620A"/>
+  </g>
+  <g fill="#F5820B" opacity=".28"><circle cx="104" cy="182" r="2"/><circle cx="298" cy="53" r="2"/><circle cx="304" cy="166" r="2"/></g>
+  <g fill="none" stroke="#F5820B" opacity=".2" stroke-width="1"><path d="M104 182h-27v15 M298 53h12v-16 M304 166h12v15"/></g>
+</svg>
