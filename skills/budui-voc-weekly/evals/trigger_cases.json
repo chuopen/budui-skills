@@ -1,0 +1,48 @@
+{
+  "should_trigger": [
+    {
+      "id": "weekly-explicit-range",
+      "input": "（上传《人工校验VOC明细.xlsx》）出 9 月 6 号到 9 月 12 号的周报",
+      "expect_behavior": "inspect 探测 → 车系清单不在对话里则必须先问哪个车系是新车 → 确认后 generate --start 2026-09-06 --end 2026-09-12 → 汇报总量/负面占比/话题与三个文件路径"
+    },
+    {
+      "id": "weekly-relative-last-week",
+      "input": "帮我出上周的新 N7 周报",
+      "expect_behavior": "车系已说明（匹配 inspect 车系清单，不重复问）；'上周'换算为上一自然周（周一至周日）并复述一句确认；未上传文件时先向用户要 Excel"
+    },
+    {
+      "id": "weekly-default-full-range-with-group",
+      "input": "把这份表全部数据出个周报，车友群截图里的要点也放进去",
+      "expect_behavior": "不问周期，generate 不传 start/end（用数据全范围）并在汇报中说明覆盖范围；车友群要点经 --group-extra 传入"
+    }
+  ],
+  "near_neighbor": [
+    {
+      "id": "period-out-of-range",
+      "input": "出 9 月 20 号到 9 月 26 号的周报",
+      "expect_behavior": "周期内无数据时脚本报错并列出该车系可用日期范围，把可用范围如实告诉用户，不得自行改周期"
+    },
+    {
+      "id": "single-week-no-prev",
+      "input": "出上周的周报（数据文件只有一周）",
+      "expect_behavior": "正常生成；stdout prev/delta 为 null，汇报时不编造环比，如实说明无上一周期数据"
+    }
+  ],
+  "should_not_trigger": [
+    {
+      "id": "single-day-report",
+      "input": "出 9 月 12 号当天的日报",
+      "expect_behavior": "单日日报不是周报，应使用 budui-voc-daily 而不是把单日硬套成 1 天周期"
+    },
+    {
+      "id": "model-accuracy",
+      "input": "这份表里模型和人工打标一致率多少？",
+      "expect_behavior": "属于模型准确率监控，不生成周报；直接答复或说明超出本技能边界"
+    },
+    {
+      "id": "monthly-aggregation",
+      "input": "把这三个月的数据按月各出一份汇总",
+      "expect_behavior": "月报聚合超出本技能边界；可说明边界并按普通分析处理，不强行用 90 天周期生成"
+    }
+  ]
+}
