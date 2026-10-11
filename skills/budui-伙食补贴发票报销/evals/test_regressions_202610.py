@@ -17,6 +17,8 @@
      去重(同人同天冲突只算 1 天)、字典外人员按金额正常参与排序(不垫底)且
      工资号/职名留空、金额=天数×50、总计行、内嵌工资号 sheet、
      报告有「汇总表对账」节(差额=同人同天重复计)
+ 11. 金额不足票(人数≥2 且金额<人数×50):实报留空、使用人后红字「金额不足」、
+     批注说明、报告单独列节;涉及人员汇总表姓名标红加批注、该天不计入天数
 
 运行: python3 evals/test_regressions_202610.py
 全部通过打印 PASS 退出 0;任一失败打印 FAIL 退出 1。
@@ -98,6 +100,10 @@ def main():
     # 用例10:字典外人员进汇总表,垫底且工资号/职名留空
     make_pdf(f'{inv}/10 月 2 日/10.2孙九26442000011334972006.pdf',
              '26442000011334972006', '2026年10月02日', '55')
+    # 用例11:金额不足(81元写2人,人均40.5无法按50报)→实报留空、标红、报告列节
+    os.makedirs(f'{inv}/10 月 4 日')
+    make_pdf(f'{inv}/10 月 4 日/10.4张三 赵六26442000011334972007.pdf',
+             '26442000011334972007', '2026年10月04日', '81')
 
     out = os.path.join(tmp, 'out.xlsx')
     report = os.path.join(tmp, 'report.md')
@@ -110,6 +116,7 @@ def main():
     wb = openpyxl.load_workbook(out)
     ws2 = wb['2026.10.2']
     ws3 = wb['2026.10.3']
+    ws4 = wb['2026.10.4']
     swb = openpyxl.load_workbook(summary)
     sws = swb['餐补汇总表']
 
@@ -170,6 +177,22 @@ def main():
         ('报告有汇总表对账节(11人天550元 vs 实报1850元)',
          '## 汇总表对账' in rep and '总计 550 元' in rep
          and '明细实报合计：1850 元' in rep and '同人同天重复计 1300 元' in rep),
+        ('金额不足票进报告节并注明差额(81元/2人差19元)',
+         '## 金额不足' in rep and '10.4张三 赵六26442000011334972007.pdf' in rep
+         and '差 19 元' in rep and '| 2026.10.4 | 1 | 81 | 0 |' in rep),
+        ('金额不足票明细表实报留空、使用人后红字「金额不足」、有批注',
+         ws4.cell(row=4, column=5).value is None
+         and str(ws4.cell(row=4, column=7).value) == '张三、赵六金额不足'
+         and ws4.cell(row=4, column=9).value is None
+         and ws4.cell(row=4, column=7).comment is not None),
+        ('金额不足涉及人员汇总表姓名标红加批注(张三/赵六)，其他人不标(钱七)',
+         sws.cell(row=srow_of('张三'), column=4).font.color is not None
+         and sws.cell(row=srow_of('张三'), column=4).font.color.rgb == 'FFFF0000'
+         and sws.cell(row=srow_of('张三'), column=4).comment is not None
+         and sws.cell(row=srow_of('赵六'), column=4).comment is not None
+         and sws.cell(row=srow_of('钱七'), column=4).comment is None
+         and (sws.cell(row=srow_of('钱七'), column=4).font.color is None
+              or sws.cell(row=srow_of('钱七'), column=4).font.color.rgb != 'FFFF0000')),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

@@ -21,6 +21,8 @@
   5. 实报金额 = min(人数×50, 发票金额)；备用票=0；
      文件名解析不出人名的非备用票 → 红字「待确认」、实报留空、加批注。
      发票金额-实报 ≥ 50 时在使用人后加红字「可加X人」。
+     金额不足（人数≥2 且 发票金额 < 人数×50，按人均 50 报不平）→ 红字「金额不足」、
+     实报留空、加批注、汇总表相关姓名标红，未计入合计，报告单独列节等人工确认。
   6. 按开票日期分 Sheet（2026.9.25 式命名），每表序号补足 20 行、SUM 合计行、
      考勤说明行、签名行；最后「合计」Sheet 按日期分组、序号每天重新计数。
   7. 每人汇总表（独立 xlsx）：当班天数 = 该人在有效票中出现的开票日期去重数，
@@ -175,10 +177,10 @@ S_LEFT = Alignment(horizontal='left', vertical='center')
 
 def build_summary_workbook(path, title, sheet_name, note, people, dict_names,
                            department, per_person, data_rows):
-    """people: [(姓名, 是否在字典, 职名或None, 当班天数)]，顺序即输出顺序。
+    """people: [(姓名, 是否在字典, 职名或None, 当班天数, 金额不足提示或None)]，顺序即输出顺序。
     版式对齐 2026 春节交付样例：宋体无加粗、A–G 细边框、序号 numfmt '0_ '、
     工资号列 VLOOKUP 内嵌「工资号」字典 sheet、金额 =天数×50、总计行、
-    考勤说明行、签名行、竖向打印 A1:G。"""
+    考勤说明行、签名行、竖向打印 A1:G。有金额不足提示的姓名标红加批注。"""
     wb = Workbook()
     wb.remove(wb.active)
     wb.calculation.fullCalcOnLoad = True
@@ -201,7 +203,7 @@ def build_summary_workbook(path, title, sheet_name, note, people, dict_names,
             ws.column_dimensions[col].width = w
 
     r = 4
-    for i, (name, in_dict, job, days) in enumerate(people, 1):
+    for i, (name, in_dict, job, days, warn) in enumerate(people, 1):
         vals = [i, department, f'=VLOOKUP(D{r},工资号!A:B,2,0)' if in_dict else None,
                 name, job, days, f'=F{r}*{per_person}']
         for ci, v in enumerate(vals, 1):
@@ -211,6 +213,12 @@ def build_summary_workbook(path, title, sheet_name, note, people, dict_names,
             c.alignment = S_CENTER
             if ci == 1:
                 c.number_format = '0_ '
+        if warn:  # 金额不足票涉及的人员：姓名标红 + 批注，提示该天未计入
+            c4 = ws.cell(row=r, column=4)
+            c4.font = Font(name='宋体', size=11, color='FFFF0000')
+            cm = Comment(f'{warn}。该票未计入当班天数；确认处理后重跑脚本更新汇总表。', 'budui')
+            cm.width, cm.height = 280, 120
+            c4.comment = cm
         ws.row_dimensions[r].height = 18.95
         r += 1
     for i in range(len(people) + 1, data_rows + 1):  # 空行补足（SUM 一并盖住，便于手工补人）
@@ -310,9 +318,12 @@ def main():
         if not names and not is_backup:
             pending = True  # 文件名无使用人且非备用 → 待确认
         buyer_bad = not (r['buyer'] == args.buyer_name and r['buyerTax'] == args.buyer_tax)
+        insufficient = (not is_backup and not pending and not buyer_bad
+                        and r['amount'] is not None and len(names) >= 2
+                        and r['amount'] < len(names) * args.per_person)
         rec = dict(date=rec_date, date_cn=date_cn, invoice_no=inv_no, amount=r['amount'],
                    names=names, not_in_dict=not_in_dict, leftover=leftover,
-                   is_backup=is_backup, pending=pending,
+                   is_backup=is_backup, pending=pending, insufficient=insufficient,
                    buyer_bad=buyer_bad, buyer=r['buyer'], buyer_tax=r['buyerTax'],
                    file=r['file'], folder=r['folder'])
         records.append(rec)
@@ -325,7 +336,7 @@ def main():
     def reimb(rec):
         if rec['is_backup']:
             return 0
-        if rec['pending'] or rec['buyer_bad'] or rec['amount'] is None:
+        if rec['pending'] or rec['buyer_bad'] or rec['insufficient'] or rec['amount'] is None:
             return None
         return min(len(rec['names']) * args.per_person, int(rec['amount'] // 1))
 
@@ -344,11 +355,12 @@ def main():
         detail[d].sort(key=lambda r: r['is_backup'])  # 备用排末尾
     bad_invoices = [r for r in records if r['buyer_bad']]
     pending_invoices = [r for r in records if r['pending'] and not r['buyer_bad']]
+    insufficient_invoices = [r for r in records if r['insufficient']]
 
     # 同人同天多张有效票：每人每天只能报一次
     per_day = {}
     for rec in records:
-        if rec['is_backup'] or rec['pending'] or rec['buyer_bad']:
+        if rec['is_backup'] or rec['pending'] or rec['buyer_bad'] or rec['insufficient']:
             continue
         for n in rec['names']:
             per_day.setdefault((rec['date'], n), []).append(rec['file'])
@@ -386,6 +398,8 @@ def main():
                 users, users_font = '备用', F_RED
             elif rec['pending']:
                 users, users_font = '待确认', F_RED
+            elif rec['insufficient']:
+                users, users_font = '、'.join(rec['names']), None  # 下方富文本追加红字「金额不足」
             else:
                 users = '、'.join(rec['names']) + (f'、可加{CN_NUM[add]}人' if add > 0 else '')
                 users_font = None
@@ -405,11 +419,21 @@ def main():
                     TextBlock(InlineFont(rFont='苹方-简', sz=8), base),
                     TextBlock(InlineFont(rFont='苹方-简', sz=8, color='FF0000'),
                               f'可加{CN_NUM[add]}人'))
-            # 批注：字典外姓名 / 待确认
+            if rec['insufficient']:
+                ws.cell(row=r, column=7).value = CellRichText(
+                    TextBlock(InlineFont(rFont='苹方-简', sz=8), '、'.join(rec['names'])),
+                    TextBlock(InlineFont(rFont='苹方-简', sz=8, color='FF0000'), '金额不足'))
+            # 批注：字典外姓名 / 待确认 / 金额不足
             notes = [f'「{n}」不在工资号字典中，可能为新员工，请核实。' for n in rec['not_in_dict']]
             if rec['pending']:
                 notes.append(f'该发票（{rec["invoice_no"]}，{rec["amount"]}元）文件名未注明使用人，'
                              f'请确认后补填使用人与实报金额。')
+            if rec['insufficient']:
+                need = len(rec['names']) * args.per_person
+                notes.append(f'发票金额 {rec["amount"]:g} 元 < 使用人 {len(rec["names"])} 人 × '
+                             f'{args.per_person} 元 = {need} 元，按人均 {args.per_person} 元无法全额报销'
+                             f'（人均 {rec["amount"] / len(rec["names"]):.1f} 元），实报已留空，'
+                             f'请确认处理方式（如按人数核定、退回重开）后更正并重跑。')
             if notes:
                 cm = Comment('\n'.join(notes), 'budui')
                 cm.width, cm.height = 280, 120
@@ -478,6 +502,8 @@ def main():
                 users = '备用'
             elif rec['pending']:
                 users = '待确认'
+            elif rec['insufficient']:
+                users = '、'.join(rec['names'])  # 下方富文本追加红字「金额不足」
             else:
                 users = '、'.join(rec['names']) + (f'、可加{CN_NUM[add]}人' if add > 0 else '')
             vals = [i, rec['invoice_no'], rec['date'], rec['amount'],
@@ -496,6 +522,10 @@ def main():
                     TextBlock(InlineFont(rFont='苹方-简', sz=8), base),
                     TextBlock(InlineFont(rFont='苹方-简', sz=8, color='FF0000'),
                               f'可加{CN_NUM[add]}人'))
+            if rec['insufficient']:
+                ws.cell(row=r, column=7).value = CellRichText(
+                    TextBlock(InlineFont(rFont='苹方-简', sz=8), '、'.join(rec['names'])),
+                    TextBlock(InlineFont(rFont='苹方-简', sz=8, color='FF0000'), '金额不足'))
             if e is not None:
                 c = ws.cell(row=r, column=9, value=f'=INT((D{r}-E{r})/{args.per_person})')
                 c.font = F_DATA; c.alignment = CENTER
@@ -527,13 +557,15 @@ def main():
         print(f'  {date}: {len(recs)}张 发票金额={d_sum:g} 实报={e_sum:g}')
     print(f'  合计: 发票金额={total_d:g} 实报={total_e:g}')
     print(f'  抬头异常(未计入): {len(bad_invoices)}张; 待确认: {len(pending_invoices)}张; '
+          f'金额不足(未计入): {len(insufficient_invoices)}张; '
           f'同号重复剔除: {len(dups)}; 同人同天冲突: {len(person_conflicts)}; '
           f'文件名内嵌发票号不一致: {len(mismatches)}; 无法解析: {len(unparsed)}')
 
     # ---- 每人汇总表：当班天数 = 有效票开票日期去重数 ----
     person_days, extra_order = {}, []
     for rec in records:
-        if rec['is_backup'] or rec['pending'] or rec['buyer_bad'] or rec['amount'] is None:
+        if (rec['is_backup'] or rec['pending'] or rec['buyer_bad'] or rec['insufficient']
+                or rec['amount'] is None):
             continue
         for n in rec['names']:
             if n not in person_days:
@@ -541,11 +573,17 @@ def main():
                 if n not in dict_names:
                     extra_order.append(n)
             person_days[n].add(rec['date'])
+    insuff_note = {}
+    for rec in records:
+        if rec['insufficient']:
+            for n in rec['names']:
+                insuff_note.setdefault(n, []).append(
+                    f'{rec["date_cn"]}一票 {rec["amount"]:g} 元（{len(rec["names"])}人）金额不足')
     people = []
     for n in list(dict_names) + extra_order:  # 同金额时按此顺序稳定顺延：字典序在前、字典外按首次出现
         if n in person_days:
             people.append((n, n in dict_names, dict_names.get(n, (None, None))[1] or None,
-                           len(person_days[n])))
+                           len(person_days[n]), '；'.join(insuff_note.get(n, [])) or None))
     people.sort(key=lambda p: -p[3])  # 汇总表按金额（天数×50）从高到低；工资号为空不特殊处理，金额高照样排前
     if person_days:
         ds = sorted(tuple(int(x) for x in d.split('.')) for v in person_days.values() for d in v)
@@ -559,7 +597,8 @@ def main():
     summary_total = person_day_total * args.per_person
     row_subsidy = cap_loss = add_bonus = 0
     for rec in records:
-        if rec['is_backup'] or rec['pending'] or rec['buyer_bad'] or rec['amount'] is None:
+        if (rec['is_backup'] or rec['pending'] or rec['buyer_bad'] or rec['insufficient']
+                or rec['amount'] is None):
             continue
         e = reimb(rec)
         n = len(rec['names'])
@@ -587,6 +626,17 @@ def main():
         for rec in pending_invoices:
             L.append(f'- {rec["file"]}：发票号 {rec["invoice_no"]}，{rec["amount"]}元，'
                      f'{rec["date_cn"]}——请告知使用人后补填实报')
+        L.append('')
+    if insufficient_invoices:
+        L += ['## 金额不足（发票金额 < 使用人人数×50，未计入，需确认处理）', '',
+              '以下发票按人均 50 元覆盖不了全部使用人，明细表实报已留空、使用人后标红'
+              '「金额不足」，涉及人员在汇总表中姓名标红且该天未计入当班天数；'
+              '请确认处理方式（如按实际人数核定、退回重开）后重跑脚本：', '']
+        for rec in insufficient_invoices:
+            need = len(rec['names']) * args.per_person
+            L.append(f'- {rec["file"]}：发票号 {rec["invoice_no"]}，{rec["amount"]:g} 元，'
+                     f'使用人 {len(rec["names"])} 人（{"、".join(rec["names"])}），{rec["date_cn"]}'
+                     f'——按人均 50 元差 {need - rec["amount"]:g} 元')
         L.append('')
     if bad_invoices:
         L += ['## 抬头异常（未计入，需退回重开）', '',
@@ -645,13 +695,16 @@ def main():
           f'- 汇总表 `{os.path.basename(summary_out)}`：{len(people)} 人、'
           f'{person_day_total} 人天、总计 {summary_total:g} 元',
           f'- 明细实报合计：{total_e:g} 元']
+    if insufficient_invoices:
+        L.append(f'- 金额不足 {len(insufficient_invoices)} 张未计入（见「金额不足」节），'
+                 '确认处理后重跑脚本，汇总表会随之更新。')
     diff = total_e - summary_total
     if diff == 0 and add_bonus == 0 and cap_loss == 0 and dup_extra == 0:
         L += ['- 汇总总计与明细实报一致。', '']
     else:
         L += [f'- 差额 {diff:g} 元 = 可加X人补贴 +{add_bonus:g} 元 − 发票封顶少算 {cap_loss:g} 元 '
               f'+ 同人同天重复计 {dup_extra * args.per_person:g} 元（重复明细见上文冲突节）。'
-              '备用/待确认/抬头异常票不计入汇总表；待确认票确认后重跑脚本再交付。', '']
+              '备用/待确认/金额不足/抬头异常票不计入汇总表；待确认、金额不足票确认后重跑脚本再交付。', '']
     L += ['## 汇总', '', '| Sheet | 张数 | 发票金额 | 实报金额 |', '|---|---|---|---|']
     for date in sorted(detail):
         recs = detail[date]
