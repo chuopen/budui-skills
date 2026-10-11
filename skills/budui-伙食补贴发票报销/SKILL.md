@@ -1,7 +1,10 @@
 ---
 name: budui-伙食补贴发票报销
 description: 批量处理广九客运段节假日伙食补贴电子发票 PDF（提取发票号/开票日期/金额、按发票号查重、校验购买方抬头和税号、人名与工资号字典核对），生成按日期分 Sheet 的报销明细 Excel（明细 + 合计，苹方-简表单格式）、每人汇总表（部门/工资号/职名/当班天数/金额，宋体表单）和 Markdown 问题报告。当用户要求处理伙食补贴/报销发票 PDF、生成报销明细表或合计表、生成每人伙食补贴汇总表、发票查重、核验发票抬头时使用。不适用于：无发票 PDF、仅凭考勤数据做工资号表、非铁路报销场景。
-Copyright (c) 不兑
+metadata:
+  author: 不兑 (budui)
+  copyright: Copyright (c) 不兑 · https://github.com/chuopen/
+  version: "1.1.0"
 ---
 
 # budui-伙食补贴发票报销
