@@ -24,8 +24,8 @@
   6. 按开票日期分 Sheet（2026.9.25 式命名），每表序号补足 20 行、SUM 合计行、
      考勤说明行、签名行；最后「合计」Sheet 按日期分组、序号每天重新计数。
   7. 每人汇总表（独立 xlsx）：当班天数 = 该人在有效票中出现的开票日期去重数，
-     金额 = 天数×50；人员按字典序、字典外排最后；内嵌「工资号」字典 sheet 供
-     VLOOKUP；宋体表单版式对齐 2026 春节交付样例。
+     金额 = 天数×50；人员按金额从高到低排（同额保持字典序、字典外按首次出现）；
+     内嵌「工资号」字典 sheet 供 VLOOKUP；宋体表单版式对齐 2026 春节交付样例。
   8. 输出 Markdown 问题报告（重复票、抬头异常、字典外姓名、待确认票、错位文件、
      汇总表对账）。
 
@@ -542,10 +542,11 @@ def main():
                     extra_order.append(n)
             person_days[n].add(rec['date'])
     people = []
-    for n in list(dict_names) + extra_order:  # 字典序在前，字典外按首次出现垫底
+    for n in list(dict_names) + extra_order:  # 同金额时按此顺序稳定顺延：字典序在前、字典外按首次出现
         if n in person_days:
             people.append((n, n in dict_names, dict_names.get(n, (None, None))[1] or None,
                            len(person_days[n])))
+    people.sort(key=lambda p: -p[3])  # 汇总表按金额（天数×50）从高到低；工资号为空不特殊处理，金额高照样排前
     if person_days:
         ds = sorted(tuple(int(x) for x in d.split('.')) for v in person_days.values() for d in v)
         (y1, m1, d1), (y2, m2, d2) = ds[0], ds[-1]
