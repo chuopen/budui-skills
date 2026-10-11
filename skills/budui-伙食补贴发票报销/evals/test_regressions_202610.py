@@ -13,8 +13,9 @@
   7. 前导数字「925」与日期后缀「号」不粘人名
   8. 无文本层 PDF 不再静默丢弃,报告列出「无法解析」节
   9. 单日票数超过 20,合计行 SUM 覆盖全部数据行
- 10. 每人汇总表:字典序输出、当班天数按日期去重(同人同天冲突只算 1 天)、
-     字典外人员垫底且工资号/职名留空、金额=天数×50、总计行、内嵌工资号 sheet、
+ 10. 每人汇总表:按金额(天数×50)从高到低排序、同额保持字典序、当班天数按日期
+     去重(同人同天冲突只算 1 天)、字典外人员按金额正常参与排序(不垫底)且
+     工资号/职名留空、金额=天数×50、总计行、内嵌工资号 sheet、
      报告有「汇总表对账」节(差额=同人同天重复计)
 
 运行: python3 evals/test_regressions_202610.py
@@ -146,12 +147,16 @@ def main():
          next((ws3.cell(row=r, column=4).value for r in range(4, 40)
                if ws3.cell(row=r, column=2).value == '合计'), '')
          == '=SUM(D4:D24)'),
-        ('汇总表人员按字典序(第1人=张三)',
-         sws.cell(row=4, column=4).value == '张三'),
+        ('汇总表按金额降序(钱七3天第1、赵六2天第2)',
+         sws.cell(row=4, column=4).value == '钱七' and sws.cell(row=4, column=6).value == 3
+         and sws.cell(row=5, column=4).value == '赵六' and sws.cell(row=5, column=6).value == 2),
+        ('同金额保持字典序(1天组张三李四王五欧阳锋耿楠楠)',
+         [sws.cell(row=r, column=4).value for r in range(6, 11)]
+         == ['张三', '李四', '王五', '欧阳锋', '耿楠楠']),
         ('当班天数按日期去重(赵六2天、钱七3天含21张同天票只算1天)',
          srow_of('赵六') and sws.cell(row=srow_of('赵六'), column=6).value == 2
          and srow_of('钱七') and sws.cell(row=srow_of('钱七'), column=6).value == 3),
-        ('字典外人员垫底且工资号/职名留空(孙九第8人)',
+        ('字典外人员按金额正常排序且工资号/职名留空(孙九1天排末位)',
          srow_of('孙九') == 11 and sws.cell(row=11, column=3).value is None
          and sws.cell(row=11, column=5).value is None),
         ('金额列=天数×50公式、总计行SUM盖住补足空行',
